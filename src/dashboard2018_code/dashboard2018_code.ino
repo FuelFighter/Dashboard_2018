@@ -191,8 +191,6 @@ volatile bool hazardLightActive = false;
 // Lights
 volatile bool drivingLightsEnabled = false;  // this is set if driving lights should be turned on
 
-
-
 /* INIT FUNCTIONS */
 void initScreen1() {
     screen1.begin();
@@ -238,6 +236,7 @@ void initCANbus() {
 }
 
 void initSerial() {
+    // to communicate with the computer
     Serial.begin(SERIAL_BAUDRATE);
 }
 
@@ -316,217 +315,45 @@ void reset() {
     Serial.print("  RESET!!  ");
 }
 
+void initScreensContent() {
+    // Draw background only once
+    drawBackground(screen1, true);
+    drawBackground(screen2, false);
 
-/* ISRs */
-void resetLapTimeAndIncrementLapCount_ISR() {
-    // if statement to make sure button in not accedently pressed multiple times in a row
-    if (!lapButtonPressedRecently) {
-        lapButtonPressedRecently = true;
-        lapButtonCooldown = LAP_BUTTON_COOLDOWN_SECS;
-        lapTimes[lapCount-1] = lapTimeMillis;
-        //lapCount = (lapCount + TOTAL_LAPS) % TOTAL_LAPS + 1;  // to not crash after 10 laps
-        ++lapCount;
-        if (lapCount > TOTAL_LAPS) {
-            reset();
-        }
-        lapTimeMillis = 0;
-        newLap = true;
-        Serial.print("  NEW LAP!  ");
-    }
-    else {
-        Serial.print("  TOO SOON  ");
+    // Draw static text on screen 1 (right)
+    screen1.setFont(&FreeMono12pt7b);
+    const char current[] = "A";
+    drawString(screen1, current, 285, 137, 1);
+
+    // Draw static text on screen 2 (left)
+    const char voltage[] = "V";
+    screen2.setFont(&FreeMono12pt7b);
+    drawString(screen2, voltage, 145, 60, 1);
+    drawTimeLeft(screen2, minutesRemaining);
+
+    const char mins[] = "mins";
+    screen2.setFont(&FreeMono9pt7b);
+    drawString(screen2, mins, 260, 163, 1);
+
+    const char kmh[] = "km/h";
+    screen1.setFont(&FreeMono9pt7b);
+    drawString(screen1, kmh, 100, 135, 1);
+
+    // draw voltage value 
+    drawString(screen2, "DUNNO", 32, 60, 1);
+
+    newLap = true;  // to get the left screen (screen2) to actually display something
+}
+
+void initSteeringWheelLightShow() {
+    // light show at start-up
+    for (int i = 0; i < swheelLights.numPixels(); ++i) {
+        swheelLights.setPixelColor(swheelLights.numPixels() - i - 1, COLOR_SWHEELLIGHTS);
+        swheelLights.show();
+        delay(100);
     }
 }
 
-void deadmanSwtichChanged_ISR() {
-    int state = digitalRead(PIN_DEADMAN_SWITCH);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        deadmanSwitchIsPressed = false;
-
-        millisAtLastChange = millis();
-        deadmanSwitchNotPressed(swheelLights);
-        Serial.print("  DMS UNPRESSED!  ");
-    }
-    else {  
-        deadmanSwitchIsPressed = true;
-
-        millisAtLastChange = millis();
-        turnOffStrip(swheelLights);
-
-        Serial.print("  DMS PRESSED!  ");
-    }
-}
-
-void leftBlinkerChanged_ISR() {
-    int state = digitalRead(PIN_BLINKER_L);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        leftBlinkerPressed = false;
-        // to make sure lights are turned off when button is depressed
-        turnOffStrip(backLights, BLINK_LEFT_START_BACKLIGHTS, BLINK_LEFT_END_BACKLIGHTS);
-        turnOffStrip(frontLights, BLINK_LEFT_START_FRONTLIGHTS, BLINK_LEFT_END_FRONTLIGHTS);
-
-        Serial.print("  BLINK L UNPRESSED  ");
-    }
-    else {
-        leftBlinkerPressed = true;
-        Serial.print("  BLINK L PRESSED  ");
-    }
-}
-
-void rightBlinkerChanged_ISR() {
-    int state = digitalRead(PIN_BLINKER_R);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        rightBlinkerPressed = false;
-        // to make sure lights are turned off when button is depressed
-        turnOffStrip(backLights, BLINK_RIGHT_START_BACKLIGHTS, BLINK_RIGHT_END_BACKLIGHTS);
-        turnOffStrip(frontLights, BLINK_RIGHT_START_FRONTLIGHTS, BLINK_RIGHT_END_FRONTLIGHTS);
-
-        Serial.print("  BLINK R UNPRESSED  ");
-    }
-    else {
-        rightBlinkerPressed = true;
-        Serial.print("  BLINK R PRESSED  ");
-    }
-}
-
-void lightsEnable_ISR() {
-    int state = digitalRead(PIN_LIGHT_ENABLE);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        drivingLightsEnabled = false;
-        Serial.print("  LIGHTS OFF  ");
-    }
-    else {
-        drivingLightsEnabled = true;
-        Serial.print("  LIGHTS ON  ");
-    }
-}
-
-void brakeButtonChanged_ISR() {
-    // this button is reversed
-    int state = digitalRead(PIN_BRAKE_ENABLED);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        // brake lights on
-        backLights.setBrightness(BRIGHTNESS_BACK_BRAKE);
-        brakeEnabled = true;
-        drivingLightsBack(backLights);
-        Serial.print("  BRAKES ON  ");
-    }
-    else {
-        // brake lights off
-        backLights.setBrightness(BRIGHTNESS_BACK);
-        brakeEnabled = false;
-        if (!drivingLightsEnabled) {
-            turnOffStrip(backLights);
-        }
-        Serial.print("  BRAKES OFF  ");
-
-        ccActive = false;
-    }
-}
-
-void hazardLightButtonChanged_ISR() {
-    int state = digitalRead(PIN_HAZARD_LIGHT);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        hazardLightActive = false;
-        Serial.print("  HAZARD OFF  ");
-    }
-    else {
-        hazardLightActive = true;
-        Serial.print("  HAZARD ON  ");
-    }
-}
-
-void ccButtonPressed_ISR() {
-    // cc = cruise control
-    // this should be OK since the button is debounced with a capactior
-    ccActive = !ccActive;
-    Serial.print(" CC TGL  ");
-}
-
-void optimalCurrentButtonChanged_ISR() {
-    int state = digitalRead(PIN_OPTIMAL_CURRENT);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        optimalCurrent = false;
-        Serial.print("  OPT-CURR OFF  ");
-    }
-    else {
-        optimalCurrent = true;
-        Serial.print("  OPT-CURR ON  ");
-    }
-}
-
-void optimalBrakeButtonChanged_ISR() {
-    int state = digitalRead(PIN_OPTIMAL_BRAKE);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        optimalBrake = false;
-        Serial.print("  OPT-BRAKE OFF  ");
-    }
-    else {
-        optimalBrake = true;
-        Serial.print("  OPT-BRAKE ON  ");
-    }
-}
-
-void blankButtonPressed_ISR() {
-    reset();
-    Serial.print("  BLANK  ");
-}
-
-void gear2_ISR() {
-    int state = digitalRead(PIN_GEAR_2);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        buttons &= ~GEAR_2_bm;
-        Serial.print("  GEAR 2 OFF  ");
-    }
-    else {
-        buttons |= GEAR_2_bm;
-        Serial.print("  GEAR 2 ON  ");
-    }
-}
-
-void gear1_ISR() {
-    int state = digitalRead(PIN_GEAR_1);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        buttons &= ~GEAR_1_bm;
-        Serial.print("  GEAR 1 OFF  ");
-    }
-    else {
-        buttons |= GEAR_1_bm;
-        Serial.print("  GEAR 1 ON  ");
-    }
-}
-
-void gearAutoManual_ISR() {
-    int state = digitalRead(PIN_GEAR_AUTO_MANUAL);
-
-    if (state == HIGH) {  // RISING -- is unpressed
-        // manual
-        buttons &= ~GEAR_AUTO_MANUAL_bm;
-        Serial.print("  MANUAL GEAR  ");
-    }
-    else {
-        // auto
-        buttons |= GEAR_AUTO_MANUAL_bm;
-        Serial.print("  AUTO GEAR  ");
-    }
-}
-
-void t1_OVF_ISR() {
-    if (deadmanSwitchIsPressed) {
-        sendCANoverUART(txmsg);
-        Serial.print("  SENT CAN  ");
-    }
-}
 
 /* MAIN PROGRAM */
 void setup() {
@@ -544,39 +371,9 @@ void setup() {
     initPins();
     initTimer1();
 
-    // Draw background only once
-    drawBackground(screen1, true);
-    drawBackground(screen2, false);
+    initScreensContent();
 
-    // Draw static text on screen 1 (right)
-    screen1.setFont(&FreeMono12pt7b);
-    const char current[] = "A";
-    drawString(screen1, current, 285, 137, 1);
-
-    // Draw static text on screen 2 (left)
-    const char voltage[] = "V";
-    screen2.setFont(&FreeMono12pt7b);
-    drawString(screen2, voltage, 145, 60, 1);
-    newLap = true;  // to get the left screen to actually display something
-    drawTimeLeft(screen2, minutesRemaining);
-
-    const char mins[] = "mins";
-    screen2.setFont(&FreeMono9pt7b);
-    drawString(screen2, mins, 260, 163, 1);
-
-    const char kmh[] = "km/h";
-    screen1.setFont(&FreeMono9pt7b);
-    drawString(screen1, kmh, 100, 135, 1);
-
-    // draw voltage value 
-    drawString(screen2, "DUNNO", 32, 60, 1);
-
-    // light show at start-up
-    for (int i = 0; i < swheelLights.numPixels(); ++i) {
-        swheelLights.setPixelColor(swheelLights.numPixels() - i - 1, COLOR_SWHEELLIGHTS);
-        swheelLights.show();
-        delay(100);
-    }    
+    initSteeringWheelLightShow();
 }
 
 void loop() {
@@ -833,7 +630,7 @@ void loop() {
             ++messagesSinceLastSpeedUpdate;
         }
 
-        voltage = (msg.buf[2] << 8 | msg.buf[3]) / VOLTAGE_SCALAR;
+        voltage = (msg.buf[3] << 8 | msg.buf[2]) / VOLTAGE_SCALAR;
         current = msg.buf[1] / CURRENT_SCALAR;
 
         drawCurrentValue(screen1, current);
@@ -968,4 +765,215 @@ void loop() {
 
     Serial.println();
     millisEnd = millis();
+}
+
+/* ISRs */
+void resetLapTimeAndIncrementLapCount_ISR() {
+    // if statement to make sure button in not accedently pressed multiple times in a row
+    if (!lapButtonPressedRecently) {
+        lapButtonPressedRecently = true;
+        lapButtonCooldown = LAP_BUTTON_COOLDOWN_SECS;
+        lapTimes[lapCount-1] = lapTimeMillis;
+        //lapCount = (lapCount + TOTAL_LAPS) % TOTAL_LAPS + 1;  // to not crash after 10 laps
+        ++lapCount;
+        if (lapCount > TOTAL_LAPS) {
+            reset();
+        }
+        lapTimeMillis = 0;
+        newLap = true;
+        Serial.print("  NEW LAP!  ");
+    }
+    else {
+        Serial.print("  TOO SOON  ");
+    }
+}
+
+void deadmanSwtichChanged_ISR() {
+    int state = digitalRead(PIN_DEADMAN_SWITCH);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        deadmanSwitchIsPressed = false;
+
+        millisAtLastChange = millis();
+        deadmanSwitchNotPressed(swheelLights);
+        Serial.print("  DMS UNPRESSED!  ");
+    }
+    else {  
+        deadmanSwitchIsPressed = true;
+
+        millisAtLastChange = millis();
+        turnOffStrip(swheelLights);
+
+        Serial.print("  DMS PRESSED!  ");
+    }
+}
+
+void leftBlinkerChanged_ISR() {
+    int state = digitalRead(PIN_BLINKER_L);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        leftBlinkerPressed = false;
+        // to make sure lights are turned off when button is depressed
+        turnOffStrip(backLights, BLINK_LEFT_START_BACKLIGHTS, BLINK_LEFT_END_BACKLIGHTS);
+        turnOffStrip(frontLights, BLINK_LEFT_START_FRONTLIGHTS, BLINK_LEFT_END_FRONTLIGHTS);
+
+        Serial.print("  BLINK L UNPRESSED  ");
+    }
+    else {
+        leftBlinkerPressed = true;
+        Serial.print("  BLINK L PRESSED  ");
+    }
+}
+
+void rightBlinkerChanged_ISR() {
+    int state = digitalRead(PIN_BLINKER_R);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        rightBlinkerPressed = false;
+        // to make sure lights are turned off when button is depressed
+        turnOffStrip(backLights, BLINK_RIGHT_START_BACKLIGHTS, BLINK_RIGHT_END_BACKLIGHTS);
+        turnOffStrip(frontLights, BLINK_RIGHT_START_FRONTLIGHTS, BLINK_RIGHT_END_FRONTLIGHTS);
+
+        Serial.print("  BLINK R UNPRESSED  ");
+    }
+    else {
+        rightBlinkerPressed = true;
+        Serial.print("  BLINK R PRESSED  ");
+    }
+}
+
+void lightsEnable_ISR() {
+    int state = digitalRead(PIN_LIGHT_ENABLE);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        drivingLightsEnabled = false;
+        Serial.print("  LIGHTS OFF  ");
+    }
+    else {
+        drivingLightsEnabled = true;
+        Serial.print("  LIGHTS ON  ");
+    }
+}
+
+void brakeButtonChanged_ISR() {
+    // this button is reversed
+    int state = digitalRead(PIN_BRAKE_ENABLED);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        // brake lights on
+        backLights.setBrightness(BRIGHTNESS_BACK_BRAKE);
+        brakeEnabled = true;
+        drivingLightsBack(backLights);
+        Serial.print("  BRAKES ON  ");
+    }
+    else {
+        // brake lights off
+        backLights.setBrightness(BRIGHTNESS_BACK);
+        brakeEnabled = false;
+        if (!drivingLightsEnabled) {
+            turnOffStrip(backLights);
+        }
+        Serial.print("  BRAKES OFF  ");
+
+        ccActive = false;
+    }
+}
+
+void hazardLightButtonChanged_ISR() {
+    int state = digitalRead(PIN_HAZARD_LIGHT);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        hazardLightActive = false;
+        Serial.print("  HAZARD OFF  ");
+    }
+    else {
+        hazardLightActive = true;
+        Serial.print("  HAZARD ON  ");
+    }
+}
+
+void ccButtonPressed_ISR() {
+    // cc = cruise control
+    // this should be OK since the button is debounced with a capactior
+    ccActive = !ccActive;
+    Serial.print(" CC TGL  ");
+}
+
+void optimalCurrentButtonChanged_ISR() {
+    int state = digitalRead(PIN_OPTIMAL_CURRENT);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        optimalCurrent = false;
+        Serial.print("  OPT-CURR OFF  ");
+    }
+    else {
+        optimalCurrent = true;
+        Serial.print("  OPT-CURR ON  ");
+    }
+}
+
+void optimalBrakeButtonChanged_ISR() {
+    int state = digitalRead(PIN_OPTIMAL_BRAKE);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        optimalBrake = false;
+        Serial.print("  OPT-BRAKE OFF  ");
+    }
+    else {
+        optimalBrake = true;
+        Serial.print("  OPT-BRAKE ON  ");
+    }
+}
+
+void blankButtonPressed_ISR() {
+    reset();
+    Serial.print("  BLANK  ");
+}
+
+void gear2_ISR() {
+    int state = digitalRead(PIN_GEAR_2);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        buttons &= ~GEAR_2_bm;
+        Serial.print("  GEAR 2 OFF  ");
+    }
+    else {
+        buttons |= GEAR_2_bm;
+        Serial.print("  GEAR 2 ON  ");
+    }
+}
+
+void gear1_ISR() {
+    int state = digitalRead(PIN_GEAR_1);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        buttons &= ~GEAR_1_bm;
+        Serial.print("  GEAR 1 OFF  ");
+    }
+    else {
+        buttons |= GEAR_1_bm;
+        Serial.print("  GEAR 1 ON  ");
+    }
+}
+
+void gearAutoManual_ISR() {
+    int state = digitalRead(PIN_GEAR_AUTO_MANUAL);
+
+    if (state == HIGH) {  // RISING -- is unpressed
+        // manual
+        buttons &= ~GEAR_AUTO_MANUAL_bm;
+        Serial.print("  MANUAL GEAR  ");
+    }
+    else {
+        // auto
+        buttons |= GEAR_AUTO_MANUAL_bm;
+        Serial.print("  AUTO GEAR  ");
+    }
+}
+
+void t1_OVF_ISR() {
+    if (deadmanSwitchIsPressed) {
+        sendCANoverUART(txmsg);
+        Serial.print("  SENT CAN  ");
+    }
 }

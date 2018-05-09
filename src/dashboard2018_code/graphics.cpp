@@ -55,7 +55,7 @@ void drawSpeed(Adafruit_SharpMem& screen, const float& speedVal) {
     sprintf(speedStr, "%0.1f", speedVal);
 
     screen.setFont(&FreeMono18pt7b);
-    screen.fillRect(speedX, speedY - 50, 148, 60, WHITE);
+    screen.fillRect(speedX, speedY - 42, 160, 56, WHITE);
     drawString(screen, speedStr, speedX, speedY, 2);
 }
 
