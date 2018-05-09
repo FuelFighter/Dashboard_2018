@@ -1,6 +1,9 @@
 #include "arduino.h"
 
-const int CAN_LEN = 25;  // bits
+#ifndef CAN_H_
+#define CAN_H_
+
+static const int CAN_LEN = 25;  // bits
 
 typedef struct CAN_message_t {
   uint32_t id; // can identifier
@@ -21,3 +24,5 @@ void sendCANoverUART(CAN_message_t& msg);
 
 // Parses the UART buffer to a CAN_message_t object for easier reading. 
 void parseUARTbufferToCANmessage(char bufferCorrected[], CAN_message_t& msg1, CAN_message_t& msg2);
+
+#endif

@@ -128,6 +128,8 @@ TimerOne t1;
 // TIMING
 unsigned long millisStart = millis();  // was int before
 unsigned long millisEnd   = millis();
+int timeElapsedLastLoop = 0;
+
 int leftBlinkLightTotalElapsedTime  = 0;
 int rightBlinkLightTotalElapsedTime = 0;
 bool leftBlinkState  = false;
@@ -158,6 +160,7 @@ uint8_t messagesSinceLastSpeedUpdate = 0;
 
 int throttle = 0;
 int throttleRaw = 0;
+static const int THROTTLE_HIGH = 100;
 
 int regen = 0;  // amount of regen braking
 int regenRaw = 0;
@@ -354,59 +357,11 @@ void initSteeringWheelLightShow() {
     }
 }
 
-
-/* MAIN PROGRAM */
-void setup() {
-    pinMode(PIN_DEBUG, INPUT_PULLUP);
-    debug = !digitalRead(PIN_DEBUG);
-#ifdef DEBUG
-    debug = true;
-#endif
-
-    initScreen1();
-    initScreen2();
-    initSerial();
-    initCANbus();
-    initLights();
-    initPins();
-    initTimer1();
-
-    initScreensContent();
-
-    initSteeringWheelLightShow();
-}
-
-void loop() {
-    int timeElapsedLastLoop = millisEnd - millisStart;
-    Serial.print(secondCounter);
-    Serial.print(" Time: ");
-    Serial.print(timeElapsedLastLoop);
-    Serial.print(" ms  ");
-    millisStart = millis();
-    
-    minuteCounterMillis += timeElapsedLastLoop;
-    secondCounter = minuteCounterMillis / 1000;
-
-    if (abs(secondCounter - secondCounterPrev) >= 1) {  // one second ellapsed
-        secondCounterPrev = secondCounter;
-
-        // below code is to make sure button in not accedently pressed multiple times in a row
-        --lapButtonCooldown;
-        if (lapButtonCooldown == 0) {
-            lapButtonPressedRecently = false;
-        }
-    }
-
-    // lap time
-    lapTimeMillis += timeElapsedLastLoop;
-    // reset lapTimeMillis on lap time button press interrupt
-
-
-    // Throttle
+/* FUNCTIONS */
+void readThrottle() {
     static const int THROTTLE_RAW_LOW  = 404;
     static const int THROTTLE_RAW_HIGH = 530;
     static const int THROTTLE_LOW  = 0;
-    static const int THROTTLE_HIGH = 100;
 
     if (!ccActive) {
         // only read new throttle command if cc is inactive (i.e. off)
@@ -435,8 +390,10 @@ void loop() {
         throttleRaw = map(throttle, THROTTLE_LOW, THROTTLE_HIGH, THROTTLE_RAW_LOW, THROTTLE_RAW_HIGH) + 1;
     }
 
-    Serial.print(" T: "); Serial.print(throttleRaw); Serial.print("-"); Serial.print(throttle); Serial.print(" ");
+    Serial.print(" T: "); Serial.print(throttleRaw); Serial.print("-"); Serial.print(throttle); Serial.print(" ");    
+}
 
+void readRegen() {
     static const int REGEN_RAW_LOW  = 436;
     static const int REGEN_RAW_HIGH = 542;
     static const int REGEN_LOW  = 0;
@@ -462,47 +419,64 @@ void loop() {
         ccActive = false;
     }
 
-    Serial.print(" R: "); Serial.print(regenRaw); Serial.print("-"); Serial.print(regen); Serial.print(" ");
+    Serial.print(" R: "); Serial.print(regenRaw); Serial.print("-"); Serial.print(regen); Serial.print(" ");    
+}
 
-    // Only send if deadman switch was unpressed less than 2 secs ago
-    static const int DEADMAN_SWITCH_UNPRESSED_THRESHOLD = 2000;  // ms
-    if (abs(millisStart - millisAtLastChange) <= DEADMAN_SWITCH_UNPRESSED_THRESHOLD) {
-        // Send message
-        Serial.print(" CAN DRIVE   ");
-        if (deadmanSwitchIsPressed) {
-            millisAtLastChange = millis();  // have to update each time to be able to continue being within the boundaries
+void animateSliderBar() {
+    static const uint8_t RBAR_HEIGHT = 108;
+    static const uint8_t RBAR_WIDTH  = 123;
+
+    // animate sliders for testing
+    static const double BAR_UPDATE_MIN_DIFF = 0.04;
+    // barWidth between 0..1
+    barWidth = (float)throttle / THROTTLE_HIGH;  // display throttle on on-screen bar
+    // barWidth = current / MAX_CURRENT;  // display motor current on on-screen bar
+    int barUpdateCount = 0;
+
+    uint8_t y = 168;
+    uint16_t x = 0;
+    uint8_t h = 0;
+    // have to be at least `BAR_UPDATE_MIN_DIFF` difference to be necessary to update
+    if ( abs(barWidth - barWidth_prev) >= BAR_UPDATE_MIN_DIFF) {
+        barUpdateCount = 1;
+        for (double i = 0; i < 1; i += 1.0 / RBAR_WIDTH) {
+            // leftmost
+            calcXYHforBar(i, x, y, h);
+            if (i < barWidth) {
+                screen1.fillRect(x, y, 2, h, BLACK);
+            }
+            else {
+                screen1.fillRect(x, y, 2, h, WHITE);
+            }
         }
+    }
 
-        txmsg.id = DASHBOARD_CAN_ID;
-        txmsg.len = 6;
-        txmsg.buf[0] = 0;
-        txmsg.buf[1] = buttons;
-        txmsg.buf[2] = regen;
-        txmsg.buf[3] = throttle;
-        //sendCANoverUART(txmsg);  // this is done in the timer interrupt
+    if (barUpdateCount) {
+        // we only want to update this value IF there has been a change, but not inside of for loop
+        // since that updates it before the whole bar is drawn.
+        barWidth_prev = barWidth;
+        barUpdateCount = 0;
+    }
+}
 
-        if (debug) {
-            Serial.print("  TX:");
-            Serial.print(txmsg.id);
-            Serial.print(".");
-            Serial.print(txmsg.len);
-            Serial.print(":");
-            Serial.print(txmsg.buf[0]);
-            Serial.print("-");
-            Serial.print(txmsg.buf[1]);
-            Serial.print("-");
-            Serial.print(txmsg.buf[2]);
-            Serial.print("-");
-            Serial.print(txmsg.buf[3]);
-            Serial.print("  ");
-        }
+void readSpeedFromCANmsg(CAN_message_t msg) {
+    uint8_t msgSpeedVal = msg.buf[6];
+    // to not get random spikes
+    static const uint8_t SPEED_UPDATE_THERSHOLD = 2;
+    static const uint8_t NO_MESSAGE_RECEIVE_THERSHOLD = 4;
+    if ( abs(msgSpeedVal - speedVal) <= SPEED_UPDATE_THERSHOLD 
+        || messagesSinceLastSpeedUpdate >= NO_MESSAGE_RECEIVE_THERSHOLD) {
+        messagesSinceLastSpeedUpdate = 0;
+
+        speedValPrev = speedVal;
+        speedVal = msgSpeedVal / SPEED_SCALAR;
     }
     else {
-        Serial.print(" CAN'T DRIVE ");
+        ++messagesSinceLastSpeedUpdate;
     }
+}
 
-
-    // Lights
+void doLightStuffLikeBlinkLightsAndDrivingLightsOnOrOff() {
     // make lights blink with 700 ms timing
     // if hazardLightActive = true, both lights should blink
     if (leftBlinkerPressed || hazardLightActive) {
@@ -549,6 +523,106 @@ void loop() {
             turnOffStrip(backLights);
         }
     }
+}
+
+
+/* MAIN PROGRAM */
+void setup() {
+    pinMode(PIN_DEBUG, INPUT_PULLUP);
+    debug = !digitalRead(PIN_DEBUG);
+#ifdef DEBUG
+    debug = true;
+#endif
+
+    initScreen1();
+    initScreen2();
+    initSerial();
+    initCANbus();
+    initLights();
+    initPins();
+    initTimer1();
+
+    initScreensContent();
+
+    initSteeringWheelLightShow();
+}
+
+void loop() {
+    timeElapsedLastLoop = millisEnd - millisStart;
+    Serial.print(secondCounter);
+    Serial.print(" Time: ");
+    Serial.print(timeElapsedLastLoop);
+    Serial.print(" ms  ");
+    millisStart = millis();
+    
+    minuteCounterMillis += timeElapsedLastLoop;
+    secondCounter = minuteCounterMillis / 1000;
+
+    if (abs(secondCounter - secondCounterPrev) >= 1) {  // one second ellapsed
+        secondCounterPrev = secondCounter;
+
+        // below code is to make sure button in not accedently pressed multiple times in a row
+        --lapButtonCooldown;
+        if (lapButtonCooldown == 0) {
+            lapButtonPressedRecently = false;
+        }
+    }
+
+    // lap time
+    lapTimeMillis += timeElapsedLastLoop;
+    // reset lapTimeMillis on lap time button press interrupt
+
+
+    // Throttle
+    readThrottle();
+    readRegen();
+
+
+    // Only send if deadman switch was unpressed less than 2 secs ago
+    static const int DEADMAN_SWITCH_UNPRESSED_THRESHOLD = 2000;  // ms
+    if (abs(millisStart - millisAtLastChange) <= DEADMAN_SWITCH_UNPRESSED_THRESHOLD) {
+        // Send message
+        Serial.print(" CAN DRIVE   ");
+        if (deadmanSwitchIsPressed) {
+            millisAtLastChange = millis();  // have to update each time to be able to continue being within the boundaries
+        }
+
+        txmsg.id = DASHBOARD_CAN_ID;
+        txmsg.len = 6;
+        txmsg.buf[0] = 0;
+        txmsg.buf[1] = buttons;
+        txmsg.buf[2] = regen;
+        txmsg.buf[3] = throttle;
+        //sendCANoverUART(txmsg);  // this is done in the timer interrupt
+
+        if (debug) {
+            Serial.print("  TX:");
+            Serial.print(txmsg.id);
+            Serial.print(".");
+            Serial.print(txmsg.len);
+            Serial.print(":");
+            Serial.print(txmsg.buf[0]);
+            Serial.print("-");
+            Serial.print(txmsg.buf[1]);
+            Serial.print("-");
+            Serial.print(txmsg.buf[2]);
+            Serial.print("-");
+            Serial.print(txmsg.buf[3]);
+            Serial.print("  ");
+        }
+    }
+    else {
+        // to make sure no throttle or regen command is sent when the dms is unpressed
+        txmsg.buf[0] = 0;
+        txmsg.buf[1] = buttons;
+        txmsg.buf[2] = 0;
+        txmsg.buf[3] = 0;
+        Serial.print(" CAN'T DRIVE ");
+    }
+
+
+    // Lights
+    doLightStuffLikeBlinkLightsAndDrivingLightsOnOrOff();
 
 
     const int CAN_LEN = 25;
@@ -557,47 +631,13 @@ void loop() {
     // Serial.print(" CAN: "); Serial.print(canBuffer);
     parseUARTbufferToCANmessage(canBuffer, rxmsg1, rxmsg2);
 
-
     Serial.print(" ID1: ");
     Serial.print(rxmsg1.id);
     Serial.print("  ID2: ");
     Serial.print(rxmsg2.id);
 
 
-    static const uint8_t RBAR_HEIGHT = 108;
-    static const uint8_t RBAR_WIDTH  = 123;
-
-    // animate sliders for testing
-    static const double BAR_UPDATE_MIN_DIFF = 0.04;
-    // barWidth between 0..1
-    barWidth = (float)throttle / THROTTLE_HIGH;  // display throttle on on-screen bar
-    // barWidth = current / MAX_CURRENT;  // display motor current on on-screen bar
-    int barUpdateCount = 0;
-
-    uint8_t y = 168;
-    uint16_t x = 0;
-    uint8_t h = 0;
-    // have to be at least `BAR_UPDATE_MIN_DIFF` difference to be necessary to update
-    if ( abs(barWidth - barWidth_prev) >= BAR_UPDATE_MIN_DIFF) {
-        barUpdateCount = 1;
-        for (double i = 0; i < 1; i += 1.0 / RBAR_WIDTH) {
-            // leftmost
-            calcXYHforBar(i, x, y, h);
-            if (i < barWidth) {
-                screen1.fillRect(x, y, 2, h, BLACK);
-            }
-            else {
-                screen1.fillRect(x, y, 2, h, WHITE);
-            }
-        }
-    }
-
-    if (barUpdateCount) {
-        // we only want to update this value IF there has been a change, but not inside of for loop
-        // since that updates it before the whole bar is drawn.
-        barWidth_prev = barWidth;
-        barUpdateCount = 0;
-    }
+    animateSliderBar();
 
 
     // display lap time on screen
@@ -608,6 +648,7 @@ void loop() {
         drawLapTime(screen1, lapTimeMillis / 1000);
     }
 
+
     // display speed on screen
     if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID || rxmsg2.id == MOTOR_1_STATUS_CAN_ID 
      || rxmsg1.id == MOTOR_2_STATUS_CAN_ID || rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {  // from motorcontroller
@@ -615,20 +656,7 @@ void loop() {
         if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID || rxmsg1.id == MOTOR_2_STATUS_CAN_ID)      msg = rxmsg1;
         else if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID || rxmsg2.id == MOTOR_2_STATUS_CAN_ID) msg = rxmsg2;
 
-        uint8_t msgSpeedVal = msg.buf[6];
-        // to not get random spikes
-        static const uint8_t SPEED_UPDATE_THERSHOLD = 2;
-        static const uint8_t NO_MESSAGE_RECEIVE_THERSHOLD = 4;
-        if ( abs(msgSpeedVal - speedVal) <= SPEED_UPDATE_THERSHOLD 
-            || messagesSinceLastSpeedUpdate >= NO_MESSAGE_RECEIVE_THERSHOLD) {
-            messagesSinceLastSpeedUpdate = 0;
-
-            speedValPrev = speedVal;
-            speedVal = msgSpeedVal / SPEED_SCALAR;
-        }
-        else {
-            ++messagesSinceLastSpeedUpdate;
-        }
+        readSpeedFromCANmsg(msg);
 
         voltage = (msg.buf[3] << 8 | msg.buf[2]) / VOLTAGE_SCALAR;
         current = msg.buf[1] / CURRENT_SCALAR;
@@ -651,8 +679,8 @@ void loop() {
     }
 
     // cc draw
-    x = 10;
-    y = 211;
+    uint8_t x = 10;
+    uint8_t y = 211;
     if (ccActive) {
         // Display on screen
         screen1.setFont(&FreeMono12pt7b);
@@ -668,49 +696,8 @@ void loop() {
 
     // prints whole can message
     if (debug) {
-        Serial.print(" 1:");
-        Serial.print(rxmsg1.id);
-        Serial.print(".");
-        Serial.print(rxmsg1.len);
-        Serial.print(":");
-        Serial.print(rxmsg1.buf[0]);
-        Serial.print("-");
-        Serial.print(rxmsg1.buf[1]);
-        Serial.print("-");
-        Serial.print(rxmsg1.buf[2]);
-        Serial.print("-");
-        Serial.print(rxmsg1.buf[3]);
-        Serial.print("-");
-        Serial.print(rxmsg1.buf[4]);
-        Serial.print("-");
-        Serial.print(rxmsg1.buf[5]);
-        Serial.print("-");
-        Serial.print(rxmsg1.buf[6]);
-        Serial.print("-");
-        Serial.print(rxmsg1.buf[7]);
-        Serial.print("  ");
-
-        Serial.print(" 2:");
-        Serial.print(rxmsg2.id);
-        Serial.print(".");
-        Serial.print(rxmsg2.len);
-        Serial.print(":");
-        Serial.print(rxmsg2.buf[0]);
-        Serial.print("-");
-        Serial.print(rxmsg2.buf[1]);
-        Serial.print("-");
-        Serial.print(rxmsg2.buf[2]);
-        Serial.print("-");
-        Serial.print(rxmsg2.buf[3]);
-        Serial.print("-");
-        Serial.print(rxmsg2.buf[4]);
-        Serial.print("-");
-        Serial.print(rxmsg2.buf[5]);
-        Serial.print("-");
-        Serial.print(rxmsg2.buf[6]);
-        Serial.print("-");
-        Serial.print(rxmsg2.buf[7]);
-        Serial.print("  ");
+        printEntireCANmsg(rxmsg1, 1);
+        printEntireCANmsg(rxmsg2, 2);
     }
 
     // prints specific content in can messages
@@ -972,8 +959,7 @@ void gearAutoManual_ISR() {
 }
 
 void t1_OVF_ISR() {
-    if (deadmanSwitchIsPressed) {
-        sendCANoverUART(txmsg);
-        Serial.print("  SENT CAN  ");
-    }
+    // if (deadmanSwitchIsPressed) {
+    sendCANoverUART(txmsg);
+    Serial.print("  SENT CAN  ");
 }

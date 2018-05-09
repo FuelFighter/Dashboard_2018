@@ -50,3 +50,29 @@ double exponential(const double& base, const int& exponent) {
 
     return result;
 }
+
+void printEntireCANmsg(CAN_message_t msg, int id) {
+    Serial.print(" ");
+    Serial.print(id);
+    Serial.print(": ");
+    Serial.print(msg.id);
+    Serial.print(".");
+    Serial.print(msg.len);
+    Serial.print(":");
+    Serial.print(msg.buf[0]);
+    Serial.print("-");
+    Serial.print(msg.buf[1]);
+    Serial.print("-");
+    Serial.print(msg.buf[2]);
+    Serial.print("-");
+    Serial.print(msg.buf[3]);
+    Serial.print("-");
+    Serial.print(msg.buf[4]);
+    Serial.print("-");
+    Serial.print(msg.buf[5]);
+    Serial.print("-");
+    Serial.print(msg.buf[6]);
+    Serial.print("-");
+    Serial.print(msg.buf[7]);
+    Serial.print("  ");
+}
