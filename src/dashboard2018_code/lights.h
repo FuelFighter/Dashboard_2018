@@ -1,4 +1,25 @@
+#ifndef LIGHTS_H_
+#define LIGHTS_H_
+
 #include <Adafruit_NeoPixel.h>
+
+#define NUM_BACKLIGHTS  57  // 28 r + 29 l
+#define BRIGHTNESS_BACK 40
+#define BRIGHTNESS_BACK_BRAKE 100
+#define BLINK_LEFT_START_BACKLIGHTS  28
+#define BLINK_LEFT_END_BACKLIGHTS    57
+#define BLINK_RIGHT_START_BACKLIGHTS 0
+#define BLINK_RIGHT_END_BACKLIGHTS   28
+
+#define NUM_FRONTLIGHTS  152  // 76 r + 76 l
+#define BRIGHTNESS_FRONT 60
+#define BLINK_LEFT_START_FRONTLIGHTS  76
+#define BLINK_LEFT_END_FRONTLIGHTS    152
+#define BLINK_RIGHT_START_FRONTLIGHTS 0
+#define BLINK_RIGHT_END_FRONTLIGHTS   76
+
+#define NUM_SWHEEL_LIGHTS 13
+#define BRIGHTNESS_SWHEEL 40
 
 // Colors are defined as uint32_t using the following formula
 // white << 24 | red << 16 | green << 8 | blue   << 0
@@ -26,3 +47,5 @@ void drivingLightsBack(Adafruit_NeoPixel& backLights);
 
 // Makes LED strip on steering wheel light red if deadman switch is not pressed down
 void deadmanSwitchNotPressed(Adafruit_NeoPixel& shweelLights);
+
+#endif

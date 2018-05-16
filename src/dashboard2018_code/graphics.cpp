@@ -88,6 +88,77 @@ void drawCurrentValue(Adafruit_SharpMem& screen, const double& currentVal) {
     drawString(screen, str, x, y, 2);
 }
 
+void getStateString(const int& state, char* str) {
+    // OFF:0, ACCCEL: 1, BRAKE:2, IDLE: 3, ERROR: 4, ENGAGE: 5
+    switch (state) {
+        case 0:
+            strcpy(str, "OFF");
+            break;
+        case 1:
+            strcpy(str, "ACCEL");
+            break;
+        case 2:
+            strcpy(str, "BRAKE");
+            break;
+        case 3:
+            strcpy(str, "IDLE");
+            break;
+        case 4:
+            strcpy(str, "ERROR");
+            break;
+        case 5:
+            strcpy(str, "ENGAGE");
+            break;
+        default:
+            strcpy(str, "N/A");
+            break;
+    }
+}
+
+void drawMotor1State(Adafruit_SharpMem& screen, const int& motor1) {
+    // motor states
+    // OFF:0, ACCCEL: 1, BRAKE:2, IDLE: 3, ERROR: 4, ENGAGE: 5
+
+    const int x = 29,
+              y = 27;
+
+    char stateStr[8] = {0};
+    getStateString(motor1, stateStr);
+
+    screen.setFont(&FreeMono9pt7b);
+    screen.fillRect(x, y - 25, 40, 30, WHITE);
+    drawString(screen, stateStr, x, y, 1);
+}
+
+void drawMotor2State(Adafruit_SharpMem& screen, const int& motor2) {
+    const int x = 29,
+              y = 39;
+
+    char stateStr[8] = {0};
+    getStateString(motor2, stateStr);
+
+    screen.setFont(&FreeMono9pt7b);
+    screen.fillRect(x, y - 25, 40, 30, WHITE);
+    drawString(screen, stateStr, x, y, 1);
+}
+
+void drawCC(Adafruit_SharpMem& screen, const bool& active, const int& throttle) {    
+    // cc draw
+    uint8_t x = 10;
+    uint8_t y = 211;
+    if (active) {
+        // Display on screen
+        screen.setFont(&FreeMono12pt7b);
+        char str[32];
+        sprintf(str, "CC %d", throttle);
+        drawString(screen, str, x, y, 1);
+    }
+    else {
+        // remove from screen
+        screen.fillRect(x, y - 25, 100, 30, WHITE);
+    }
+}
+
 
 
 void drawTimeLeft(Adafruit_SharpMem& screen, const int& timeLeft) {

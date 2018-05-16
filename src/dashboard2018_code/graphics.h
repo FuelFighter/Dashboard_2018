@@ -1,3 +1,6 @@
+#ifndef GRAPHICS_H_
+#define GRAPHICS_H_
+
 #include <Adafruit_SharpMem.h>
 #include <Adafruit_GFX.h>
 #include <gfxfont.h>
@@ -41,6 +44,9 @@ void calcXYHforBar(const double& percent, uint16_t& x, uint8_t& y, uint8_t& h);
 void drawSpeed(Adafruit_SharpMem& screen, const float& speedVal);
 void drawLapTime(Adafruit_SharpMem& screen, const int& lapTimeSeconds);
 void drawCurrentValue(Adafruit_SharpMem& screen, const double& currentVal);
+void drawMotor1State(Adafruit_SharpMem& screen, const int& motor1);
+void drawMotor2State(Adafruit_SharpMem& screen, const int& motor2);
+void drawCC(Adafruit_SharpMem& screen, const bool& active, const int& throttle);
 
 
 // DRAW FUNCTINOS FOR LEFT SCREEN
@@ -49,3 +55,5 @@ void drawTimeLeft(Adafruit_SharpMem& screen, const int& timeLeft);
 void drawLapCount(Adafruit_SharpMem& screen, volatile const uint8_t& count, const uint8_t& max=10);
 void drawBestAndAvgLapTime(Adafruit_SharpMem& screen, volatile const int* lapTimes, const uint8_t& size);
 void drawVoltageValue(Adafruit_SharpMem& screen, const double& voltageVal);
+
+#endif

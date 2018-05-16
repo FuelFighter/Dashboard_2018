@@ -1,6 +1,8 @@
 #include "arduino.h"
 #include "can.h"
 
+#ifndef HELPERS_H_
+#define HELPERS_H_
 
 bool checkPinHigh(int pin);
 int readADCRaw(int pin);
@@ -13,3 +15,7 @@ uint8_t asciiToDec(char c);
 double exponential(const double& base, const int& exponent);
 
 void printEntireCANmsg(CAN_message_t msg, int id);
+void printSpecificCANcontent(CAN_message_t msg, const float& speedVal, const float& voltage, const float& current);
+void printTXmsg(CAN_message_t txmsg);
+
+#endif

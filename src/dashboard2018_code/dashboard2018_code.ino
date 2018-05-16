@@ -4,13 +4,6 @@
 #include "helpers.h"
 #include <TimerOne.h>
 
-
-/* SCREEN PARAMETERS */
-#define WIDTH  320
-#define HEIGHT 240
-#define BLACK  0
-#define WHITE  1
-
 /* COMM PARAMETERS */
 // SCREEN 1
 #define S1_SCK  13
@@ -24,37 +17,9 @@
 
 // LIGHTS
 #define PIN_BACKLIGHT   35
-#define NUM_BACKLIGHTS  57  // 28 r + 29 l
-#define BRIGHTNESS_BACK 40
-#define BRIGHTNESS_BACK_BRAKE 100
-#define BLINK_LEFT_START_BACKLIGHTS  28
-#define BLINK_LEFT_END_BACKLIGHTS    57
-#define BLINK_RIGHT_START_BACKLIGHTS 0
-#define BLINK_RIGHT_END_BACKLIGHTS   28
-
 #define PIN_FRONTLIGHT   36
-#define NUM_FRONTLIGHTS  152  // 76 r + 76 l
-#define BRIGHTNESS_FRONT 60
-#define BLINK_LEFT_START_FRONTLIGHTS  76
-#define BLINK_LEFT_END_FRONTLIGHTS    152
-#define BLINK_RIGHT_START_FRONTLIGHTS 0
-#define BLINK_RIGHT_END_FRONTLIGHTS   76
-
 #define PIN_SWHEEL_LIGHT  17
-#define NUM_SWHEEL_LIGHTS 13
-#define BRIGHTNESS_SWHEEL 40
 
-// CANbus
-#define CANTX 3
-#define CANRX 4
-#define CAN_BAUDRATE 500000
-#define SERIAL_BAUDRATE 500000
-
-#define ID_MOTOR_CONTROLLER 0x450
-#define DASHBOARD_CAN_ID    0x230
-#define MOTOR_1_STATUS_CAN_ID 0x250
-#define MOTOR_2_STATUS_CAN_ID 0x260
-#define BMS_VOLT_CURRENT_CAN_ID 0x444
 
 #define SPEED_SCALAR   10.0
 #define CURRENT_SCALAR 10.0
@@ -77,8 +42,6 @@
 #define PIN_OPTIMAL_BRAKE   14
 #define PIN_BLANK           27
 
-
-
 // From dashboard
 #define PIN_BRAKE_ENABLED    26
 #define PIN_LIGHT_ENABLE     28
@@ -98,9 +61,7 @@
 #define GEAR_AUTO_MANUAL_bm (1<<GEAR_AUTO_MANUAL_bp)
 
 // Debug
-#define PIN_DEBUG 6
 bool debug = false;
-#define DEBUG
 
 // RACE INFO
 #define TOTAL_LAPS 15
@@ -124,9 +85,8 @@ Adafruit_NeoPixel swheelLights(NUM_SWHEEL_LIGHTS, PIN_SWHEEL_LIGHT, NEO_GRBW + N
 CAN_message_t txmsg, rxmsg1, rxmsg2;
 TimerOne t1;
 
-
 // TIMING
-unsigned long millisStart = millis();  // was int before
+unsigned long millisStart = millis();
 unsigned long millisEnd   = millis();
 int timeElapsedLastLoop = 0;
 
@@ -144,7 +104,7 @@ int minutesRemaining = MINUTES_TOTAL;
 volatile int lapTimeMillis = 0;
 volatile int lapTimes[TOTAL_LAPS] = {0};
 
-volatile bool lapButtonPressedRecently = true;
+volatile bool    lapButtonPressedRecently = true;
 volatile uint8_t lapButtonCooldown = LAP_BUTTON_COOLDOWN_SECS;
 
 // RACE DATA
@@ -157,6 +117,9 @@ volatile bool newLap = false;  // true when lap count button is pressed
 float speedVal = 0;
 float speedValPrev = 0;
 uint8_t messagesSinceLastSpeedUpdate = 0;
+
+int motor1state = -1;
+int motor2state = -1;
 
 int throttle = 0;
 int throttleRaw = 0;
@@ -346,6 +309,14 @@ void initScreensContent() {
     drawString(screen2, "DUNNO", 32, 60, 1);
 
     newLap = true;  // to get the left screen (screen2) to actually display something
+
+
+    // setup for motor states
+    const char m1[] = "M1:";
+    const char m2[] = "M2:";
+    screen1.setFont(&FreeMono9pt7b);
+    drawString(screen1, m1, 6, 27, 1);
+    drawString(screen1, m2, 6, 39, 1);
 }
 
 void initSteeringWheelLightShow() {
@@ -422,14 +393,14 @@ void readRegen() {
     Serial.print(" R: "); Serial.print(regenRaw); Serial.print("-"); Serial.print(regen); Serial.print(" ");    
 }
 
-void animateSliderBar() {
+void animateSliderBar(const double& barWidth) {
+    // barWidth between 0..1
     static const uint8_t RBAR_HEIGHT = 108;
     static const uint8_t RBAR_WIDTH  = 123;
 
     // animate sliders for testing
     static const double BAR_UPDATE_MIN_DIFF = 0.04;
-    // barWidth between 0..1
-    barWidth = (float)throttle / THROTTLE_HIGH;  // display throttle on on-screen bar
+    // barWidth = (float)throttle / THROTTLE_HIGH;  // display throttle on on-screen bar
     // barWidth = current / MAX_CURRENT;  // display motor current on on-screen bar
     int barUpdateCount = 0;
 
@@ -459,7 +430,7 @@ void animateSliderBar() {
     }
 }
 
-void readSpeedFromCANmsg(CAN_message_t msg) {
+void readSpeedFromCANmsg(const CAN_message_t& msg) {
     uint8_t msgSpeedVal = msg.buf[6];
     // to not get random spikes
     static const uint8_t SPEED_UPDATE_THERSHOLD = 2;
@@ -525,15 +496,19 @@ void doLightStuffLikeBlinkLightsAndDrivingLightsOnOrOff() {
     }
 }
 
+void displayLapTime(const volatile int& lapTimeMillis) {
+    // display lap time on screen
+    // `lapTimeMillis % 1000` is always between 0 and 999. When the condition is true, it means
+    // it's less than 150 ms since a new second and the lap time should update on screen.
+    static const uint8_t LAP_TIME_MILLIS_UPDATE_THRESHOLD = 150;  // ms
+    if (lapTimeMillis % 1000 < LAP_TIME_MILLIS_UPDATE_THRESHOLD) {
+        drawLapTime(screen1, lapTimeMillis / 1000);
+    }
+}
+
 
 /* MAIN PROGRAM */
 void setup() {
-    pinMode(PIN_DEBUG, INPUT_PULLUP);
-    debug = !digitalRead(PIN_DEBUG);
-#ifdef DEBUG
-    debug = true;
-#endif
-
     initScreen1();
     initScreen2();
     initSerial();
@@ -541,10 +516,10 @@ void setup() {
     initLights();
     initPins();
     initTimer1();
-
     initScreensContent();
-
     initSteeringWheelLightShow();
+
+    debug = true; // give lots of information over serial
 }
 
 void loop() {
@@ -596,19 +571,7 @@ void loop() {
         //sendCANoverUART(txmsg);  // this is done in the timer interrupt
 
         if (debug) {
-            Serial.print("  TX:");
-            Serial.print(txmsg.id);
-            Serial.print(".");
-            Serial.print(txmsg.len);
-            Serial.print(":");
-            Serial.print(txmsg.buf[0]);
-            Serial.print("-");
-            Serial.print(txmsg.buf[1]);
-            Serial.print("-");
-            Serial.print(txmsg.buf[2]);
-            Serial.print("-");
-            Serial.print(txmsg.buf[3]);
-            Serial.print("  ");
+            printTXmsg(txmsg);
         }
     }
     else {
@@ -628,44 +591,60 @@ void loop() {
     const int CAN_LEN = 25;
     char canBuffer[CAN_LEN * 2] = {0};
     readCANfromUARTtoBuffer(canBuffer);
-    // Serial.print(" CAN: "); Serial.print(canBuffer);
     parseUARTbufferToCANmessage(canBuffer, rxmsg1, rxmsg2);
-
-    Serial.print(" ID1: ");
-    Serial.print(rxmsg1.id);
-    Serial.print("  ID2: ");
-    Serial.print(rxmsg2.id);
+    Serial.print(" ID1: ");  Serial.print(rxmsg1.id);
+    Serial.print("  ID2: "); Serial.print(rxmsg2.id);
 
 
-    animateSliderBar();
+    barWidth = (float)throttle / THROTTLE_HIGH;
+    animateSliderBar(barWidth);
+    displayLapTime(lapTimeMillis);
 
 
-    // display lap time on screen
-    // `lapTimeMillis % 1000` is always between 0 and 999. When the condition is true, it means
-    // it's less than 150 ms since a new second and the lap time should update on screen.
-    static const uint8_t LAP_TIME_MILLIS_UPDATE_THRESHOLD = 150;  // ms
-    if (lapTimeMillis % 1000 < LAP_TIME_MILLIS_UPDATE_THRESHOLD) {
-        drawLapTime(screen1, lapTimeMillis / 1000);
+    bool motorCANreceived = false;
+    CAN_message_t motorMsg;
+
+    // get correct message
+    if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID || rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
+        motorCANreceived = true;
+
+        if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {
+            motorMsg = rxmsg1;
+            motor1state = motorMsg.buf[0];
+        }
+        if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
+            motorMsg = rxmsg2;
+            motor1state = motorMsg.buf[0];
+        }
     }
 
+    if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID || rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
+        motorCANreceived = true;
 
-    // display speed on screen
-    if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID || rxmsg2.id == MOTOR_1_STATUS_CAN_ID 
-     || rxmsg1.id == MOTOR_2_STATUS_CAN_ID || rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {  // from motorcontroller
-        CAN_message_t msg;
-        if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID || rxmsg1.id == MOTOR_2_STATUS_CAN_ID)      msg = rxmsg1;
-        else if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID || rxmsg2.id == MOTOR_2_STATUS_CAN_ID) msg = rxmsg2;
+        if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) {
+            motorMsg = rxmsg1;
+            motor2state = motorMsg.buf[0];
+        }
+        if (rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
+            motorMsg = rxmsg2;
+            motor2state = motorMsg.buf[0];
+        }
+    }
 
-        readSpeedFromCANmsg(msg);
+    if (motorCANreceived) {
+        readSpeedFromCANmsg(motorMsg);  // sets global var `speedVal`. Bad practice, I know, should return it instead, but I don't want to refactor everything at this stage. 
+        drawSpeed(screen1, speedVal);
 
-        voltage = (msg.buf[3] << 8 | msg.buf[2]) / VOLTAGE_SCALAR;
-        current = msg.buf[1] / CURRENT_SCALAR;
+        voltage = (motorMsg.buf[3] << 8 | motorMsg.buf[2]) / VOLTAGE_SCALAR;
+        current = motorMsg.buf[1] / CURRENT_SCALAR;
 
         drawCurrentValue(screen1, current);
         drawVoltageValue(screen2, voltage);
 
-        drawSpeed(screen1, speedVal);
+        drawMotor1State(screen1, motor1state);
+        drawMotor2State(screen1, motor2state);
     }
+
 
     // minutes remaining
     if (secondCounter >= 60) {
@@ -678,20 +657,8 @@ void loop() {
         screen2.refresh();
     }
 
-    // cc draw
-    uint8_t x = 10;
-    uint8_t y = 211;
-    if (ccActive) {
-        // Display on screen
-        screen1.setFont(&FreeMono12pt7b);
-        char str[32];
-        sprintf(str, "CC %d", throttle);
-        drawString(screen1, str, x, y, 1);
-    }
-    else {
-        // remove from screen
-        screen1.fillRect(x, y - 25, 100, 30, WHITE);
-    }
+
+    drawCC(screen1, ccActive, throttle);
 
 
     // prints whole can message
@@ -702,43 +669,8 @@ void loop() {
 
     // prints specific content in can messages
     if (debug) {
-        if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {
-            Serial.print(" >> M1 ");
-            Serial.print(rxmsg1.buf[4]);
-            Serial.print("-");
-            Serial.print(speedVal);
-        }
-        else if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) {
-            Serial.print(" >> M2 ");
-            Serial.print(rxmsg1.buf[4]);
-            Serial.print("-");
-            Serial.print(speedVal);
-        }
-        else if (rxmsg1.id == BMS_VOLT_CURRENT_CAN_ID) {
-            Serial.print(" >> BMS V: ");
-            Serial.print(voltage);
-            Serial.print(" I: ");
-            Serial.print(current);
-        }
-    
-       if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
-            Serial.print(" >> M1 ");
-            Serial.print(rxmsg2.buf[4]);
-            Serial.print("-");
-            Serial.print(speedVal);
-        }
-        else if (rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
-            Serial.print(" >> M2 ");
-            Serial.print(rxmsg2.buf[4]);
-            Serial.print("-");
-            Serial.print(speedVal);
-        }
-        else if (rxmsg2.id == BMS_VOLT_CURRENT_CAN_ID) {
-            Serial.print(" >> BMS V: ");
-            Serial.print(voltage);
-            Serial.print(" I: ");
-            Serial.print(current);
-        }
+        printSpecificCANcontent(rxmsg1, speedVal, voltage, current);
+        printSpecificCANcontent(rxmsg2, speedVal, voltage, current);
     }
 
     screen1.refresh();
@@ -750,7 +682,7 @@ void loop() {
         screen2.refresh();
     }
 
-    Serial.println();
+    Serial.println();  // to get a newline
     millisEnd = millis();
 }
 

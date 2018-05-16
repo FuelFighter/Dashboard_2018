@@ -3,6 +3,17 @@
 #ifndef CAN_H_
 #define CAN_H_
 
+#define CANTX 3
+#define CANRX 4
+#define CAN_BAUDRATE 500000
+#define SERIAL_BAUDRATE 500000
+
+#define ID_MOTOR_CONTROLLER 0x450
+#define DASHBOARD_CAN_ID    0x230
+#define MOTOR_1_STATUS_CAN_ID 0x250
+#define MOTOR_2_STATUS_CAN_ID 0x260
+#define BMS_VOLT_CURRENT_CAN_ID 0x444
+
 static const int CAN_LEN = 25;  // bits
 
 typedef struct CAN_message_t {
