@@ -41,12 +41,13 @@ void drawString(Adafruit_SharpMem& screen, const char * str, int x, int y, int s
 // calculates the x- and y-value and height for the slider bar
 // saves values in `x`, `y` and `h`. 
 void calcXYHforBar(const double& percent, uint16_t& x, uint8_t& y, uint8_t& h);
-void drawSpeed(Adafruit_SharpMem& screen, const float& speedVal);
+void drawSpeed(Adafruit_SharpMem& screen, const float& motor1speed, const float& motor2speed);
 void drawLapTime(Adafruit_SharpMem& screen, const int& lapTimeSeconds);
-void drawCurrentValue(Adafruit_SharpMem& screen, const double& currentVal);
+void drawCurrentValue(Adafruit_SharpMem& screen, const double& motor1current, const double& motor2current);
 void drawMotor1State(Adafruit_SharpMem& screen, const int& motor1);
 void drawMotor2State(Adafruit_SharpMem& screen, const int& motor2);
 void drawCC(Adafruit_SharpMem& screen, const bool& active, const int& throttle);
+void drawClutch(Adafruit_SharpMem& screen, const int& motor1clutch, const int& motor2clutch);
 
 
 // DRAW FUNCTINOS FOR LEFT SCREEN
@@ -55,5 +56,6 @@ void drawTimeLeft(Adafruit_SharpMem& screen, const int& timeLeft);
 void drawLapCount(Adafruit_SharpMem& screen, volatile const uint8_t& count, const uint8_t& max=10);
 void drawBestAndAvgLapTime(Adafruit_SharpMem& screen, volatile const int* lapTimes, const uint8_t& size);
 void drawVoltageValue(Adafruit_SharpMem& screen, const double& voltageVal);
+void drawTermperature(Adafruit_SharpMem& screen, const int& motor1temp, const int& motor2temp);
 
 #endif

@@ -47,16 +47,20 @@ void calcXYHforBar(const double& percent, uint16_t& x, uint8_t& y, uint8_t& h) {
     }
 }
 
-void drawSpeed(Adafruit_SharpMem& screen, const float& speedVal) {
-    const int     speedX = -7;
-    const uint8_t speedY = 112;
+void drawSpeed(Adafruit_SharpMem& screen, const float& motor1speed, const float& motor2speed) {
+    const int m1x = 6, m1y = 100;
+    const int m2x = 6, m2y = 150;
 
-    char speedStr[16];
-    sprintf(speedStr, "%0.1f", speedVal);
+    char motor1Str[8] = {0};
+    sprintf(motor1Str, "%0.1f", motor1speed);
 
-    screen.setFont(&FreeMono18pt7b);
-    screen.fillRect(speedX, speedY - 42, 160, 56, WHITE);
-    drawString(screen, speedStr, speedX, speedY, 2);
+    char motor2Str[8] = {0};
+    sprintf(motor2Str, "%0.1f", motor2speed);
+
+    screen.setFont(&FreeMono24pt7b);
+    screen.fillRect(0, m2y - 82, 142, 90, WHITE);
+    drawString(screen, motor1Str, m1x, m1y, 1);
+    drawString(screen, motor2Str, m2x, m2y, 1);
 }
 
 void drawLapTime(Adafruit_SharpMem& screen, const int& lapTimeSeconds) {
@@ -75,17 +79,21 @@ void drawLapTime(Adafruit_SharpMem& screen, const int& lapTimeSeconds) {
     drawString(screen, str, x, y, 2);
 }
 
-void drawCurrentValue(Adafruit_SharpMem& screen, const double& currentVal) {
-    const uint16_t x = 174;
-    const uint8_t  y = 137;
+void drawCurrentValue(Adafruit_SharpMem& screen, const double& motor1current, const double& motor2current) {
+    const int m1x = 198, m1y = 112;
+    const int m2x = 192, m2y = 148;
 
-    // format current
-    char str[16] = {0};
-    sprintf(str, "%-4.2f", currentVal);
+    char motor1Str[8] = {0};
+    sprintf(motor1Str, "%-4.2f", motor1current);
 
-    screen.fillRect(x, y - 25, 110, 30, WHITE);
-    screen.setFont(&FreeMono9pt7b);
-    drawString(screen, str, x, y, 2);
+    char motor2Str[8] = {0};
+    sprintf(motor2Str, "%-4.2f", motor2current);
+
+    screen.setFont(&FreeMono12pt7b);
+    screen.fillRect(m1x, m1y - 18, 85, 24, WHITE);
+    screen.fillRect(m2x, m2y - 18, 85, 24, WHITE);
+    drawString(screen, motor1Str, m1x, m1y, 1);
+    drawString(screen, motor2Str, m2x, m2y, 1);
 }
 
 void getStateString(const int& state, char* str) {
@@ -119,26 +127,26 @@ void drawMotor1State(Adafruit_SharpMem& screen, const int& motor1) {
     // motor states
     // OFF:0, ACCCEL: 1, BRAKE:2, IDLE: 3, ERROR: 4, ENGAGE: 5
 
-    const int x = 29,
+    const int x = 39,
               y = 27;
 
-    char stateStr[8] = {0};
+    char stateStr[10] = {0};
     getStateString(motor1, stateStr);
 
     screen.setFont(&FreeMono9pt7b);
-    screen.fillRect(x, y - 25, 40, 30, WHITE);
+    screen.fillRect(x, y - 15, 60, 20, WHITE);
     drawString(screen, stateStr, x, y, 1);
 }
 
 void drawMotor2State(Adafruit_SharpMem& screen, const int& motor2) {
-    const int x = 29,
-              y = 39;
+    const int x = 39,
+              y = 41;
 
-    char stateStr[8] = {0};
+    char stateStr[10] = {0};
     getStateString(motor2, stateStr);
 
     screen.setFont(&FreeMono9pt7b);
-    screen.fillRect(x, y - 25, 40, 30, WHITE);
+    screen.fillRect(x, y - 10, 60, 20, WHITE);
     drawString(screen, stateStr, x, y, 1);
 }
 
@@ -159,18 +167,34 @@ void drawCC(Adafruit_SharpMem& screen, const bool& active, const int& throttle) 
     }
 }
 
+void drawClutch(Adafruit_SharpMem& screen, const int& motor1clutch, const int& motor2clutch) {
+    const int m1x = 47, m1y = 201;
+    const int m2x = 47, m2y = 221;
+
+    char motor1Str[8] = {0};
+    sprintf(motor1Str, "%d", motor1clutch);
+
+    char motor2Str[8] = {0};
+    sprintf(motor2Str, "%d", motor2clutch);
+
+    screen.setFont(&FreeMono12pt7b);
+    screen.fillRect(m1x, m2y - 36, 60, 40, WHITE);
+    drawString(screen, motor1Str, m1x, m1y, 1);
+    drawString(screen, motor2Str, m2x, m2y, 1);
+}
+
 
 
 void drawTimeLeft(Adafruit_SharpMem& screen, const int& timeLeft) {
     const int     x = 180;
-    const uint8_t y = 145;
+    const uint8_t y = 125;
 
     int mins = timeLeft / 60;  // only interested in minutes
 
     char str[16];
     sprintf(str, "%2d", timeLeft);
 
-    screen.fillRect(x, y - 84, 156, 90, WHITE);
+    screen.fillRect(x, y - 64, 156, 70, WHITE);
     screen.setFont(&FreeMono18pt7b);
     drawString(screen, str, x, y, 3);
 }
@@ -246,4 +270,20 @@ void drawVoltageValue(Adafruit_SharpMem& screen, const double& voltageVal) {
     screen.fillRect(x, y - 25, 110, 30, WHITE);
     screen.setFont(&FreeMono9pt7b);
     drawString(screen, str, x, y, 2);
+}
+
+void drawTermperature(Adafruit_SharpMem& screen, const int& motor1temp, const int& motor2temp) {
+    const int m1x = 245, m1y = 201;
+    const int m2x = 245, m2y = 221;
+
+    char motor1Str[8] = {0};
+    sprintf(motor1Str, "%d", motor1temp);
+
+    char motor2Str[8] = {0};
+    sprintf(motor2Str, "%d", motor2temp);
+
+    screen.setFont(&FreeMono12pt7b);
+    screen.fillRect(m1x, m2y - 36, 60, 40, WHITE);
+    drawString(screen, motor1Str, m1x, m1y, 1);
+    drawString(screen, motor2Str, m2x, m2y, 1);
 }

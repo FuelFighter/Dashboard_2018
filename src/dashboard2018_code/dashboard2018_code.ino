@@ -116,10 +116,21 @@ volatile bool newLap = false;  // true when lap count button is pressed
 
 float speedVal = 0;
 float speedValPrev = 0;
+float motor1speed = 0;
+float motor2speed = 0;
 uint8_t messagesSinceLastSpeedUpdate = 0;
 
 int motor1state = -1;
 int motor2state = -1;
+
+int motor1temp = 0;
+int motor2temp = 0;
+
+int motor1clutch = 0;
+int motor2clutch = 0;
+
+double motor1current = 0;
+double motor2current = 0;
 
 int throttle = 0;
 int throttleRaw = 0;
@@ -140,6 +151,7 @@ volatile bool brakeEnabled = false;
 float current = 0;
 float voltage = 0;
 
+const bool CC_ENABLED = false;
 bool ccActive = false;
 
 bool optimalCurrent = false;
@@ -286,27 +298,23 @@ void initScreensContent() {
     drawBackground(screen1, true);
     drawBackground(screen2, false);
 
-    // Draw static text on screen 1 (right)
-    screen1.setFont(&FreeMono12pt7b);
-    const char current[] = "A";
-    drawString(screen1, current, 285, 137, 1);
-
     // Draw static text on screen 2 (left)
-    const char voltage[] = "V";
+    const char v[] = "V";
     screen2.setFont(&FreeMono12pt7b);
-    drawString(screen2, voltage, 145, 60, 1);
+    drawString(screen2, v, 145, 60, 1);
     drawTimeLeft(screen2, minutesRemaining);
+
+    drawVoltageValue(screen2, voltage);
+    drawCurrentValue(screen1, motor1current, motor2current);
 
     const char mins[] = "mins";
     screen2.setFont(&FreeMono9pt7b);
-    drawString(screen2, mins, 260, 163, 1);
+    drawString(screen2, mins, 260, 143, 1);
 
     const char kmh[] = "km/h";
     screen1.setFont(&FreeMono9pt7b);
-    drawString(screen1, kmh, 100, 135, 1);
-
-    // draw voltage value 
-    drawString(screen2, "DUNNO", 32, 60, 1);
+    drawString(screen1, kmh, 90, 170, 1);
+    drawSpeed(screen1, motor1speed, motor2speed);
 
     newLap = true;  // to get the left screen (screen2) to actually display something
 
@@ -316,7 +324,28 @@ void initScreensContent() {
     const char m2[] = "M2:";
     screen1.setFont(&FreeMono9pt7b);
     drawString(screen1, m1, 6, 27, 1);
-    drawString(screen1, m2, 6, 39, 1);
+    drawString(screen1, m2, 6, 41, 1);
+    
+    drawMotor1State(screen1, motor1state);
+    drawMotor2State(screen1, motor2state);
+
+    // setup for motor temps
+    const char t1[] = "T1:";
+    const char t2[] = "T2:";
+    screen2.setFont(&FreeMono12pt7b);
+    drawString(screen2, t1, 204, 201, 1);
+    drawString(screen2, t2, 204, 221, 1);
+
+    drawTermperature(screen2, motor1temp, motor2temp);
+
+    // setup for motor clutch
+    const char c1[] = "C1:";
+    const char c2[] = "C2:";
+    screen1.setFont(&FreeMono12pt7b);
+    drawString(screen1, c1, 6, 201, 1);
+    drawString(screen1, c2, 6, 221, 1);
+
+    drawClutch(screen1, motor1clutch, motor2clutch);
 }
 
 void initSteeringWheelLightShow() {
@@ -334,7 +363,7 @@ void readThrottle() {
     static const int THROTTLE_RAW_HIGH = 530;
     static const int THROTTLE_LOW  = 0;
 
-    if (!ccActive) {
+    if (!(ccActive && CC_ENABLED)) {
         // only read new throttle command if cc is inactive (i.e. off)
         throttleRaw = analogRead(PIN_THROTTLE);
     }
@@ -427,23 +456,6 @@ void animateSliderBar(const double& barWidth) {
         // since that updates it before the whole bar is drawn.
         barWidth_prev = barWidth;
         barUpdateCount = 0;
-    }
-}
-
-void readSpeedFromCANmsg(const CAN_message_t& msg) {
-    uint8_t msgSpeedVal = msg.buf[6];
-    // to not get random spikes
-    static const uint8_t SPEED_UPDATE_THERSHOLD = 2;
-    static const uint8_t NO_MESSAGE_RECEIVE_THERSHOLD = 4;
-    if ( abs(msgSpeedVal - speedVal) <= SPEED_UPDATE_THERSHOLD 
-        || messagesSinceLastSpeedUpdate >= NO_MESSAGE_RECEIVE_THERSHOLD) {
-        messagesSinceLastSpeedUpdate = 0;
-
-        speedValPrev = speedVal;
-        speedVal = msgSpeedVal / SPEED_SCALAR;
-    }
-    else {
-        ++messagesSinceLastSpeedUpdate;
     }
 }
 
@@ -611,10 +623,14 @@ void loop() {
         if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {
             motorMsg = rxmsg1;
             motor1state = motorMsg.buf[0];
+            motor1speed = motorMsg.buf[6] / SPEED_SCALAR;
+            motor1current = motorMsg.buf[1] / CURRENT_SCALAR;
         }
         if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
             motorMsg = rxmsg2;
             motor1state = motorMsg.buf[0];
+            motor1speed = motorMsg.buf[6] / SPEED_SCALAR;
+            motor1current = motorMsg.buf[1] / CURRENT_SCALAR;
         }
     }
 
@@ -624,21 +640,24 @@ void loop() {
         if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) {
             motorMsg = rxmsg1;
             motor2state = motorMsg.buf[0];
+            motor2speed = motorMsg.buf[6] / SPEED_SCALAR;
+            motor2current = motorMsg.buf[1] / CURRENT_SCALAR;
         }
         if (rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
             motorMsg = rxmsg2;
             motor2state = motorMsg.buf[0];
+            motor2speed = motorMsg.buf[6] / SPEED_SCALAR;
+            motor2current = motorMsg.buf[1] / CURRENT_SCALAR;
         }
     }
 
     if (motorCANreceived) {
-        readSpeedFromCANmsg(motorMsg);  // sets global var `speedVal`. Bad practice, I know, should return it instead, but I don't want to refactor everything at this stage. 
-        drawSpeed(screen1, speedVal);
+        drawSpeed(screen1, motor1speed, motor2speed);
 
         voltage = (motorMsg.buf[3] << 8 | motorMsg.buf[2]) / VOLTAGE_SCALAR;
         current = motorMsg.buf[1] / CURRENT_SCALAR;
 
-        drawCurrentValue(screen1, current);
+        drawCurrentValue(screen1, motor1current, motor2current);
         drawVoltageValue(screen2, voltage);
 
         drawMotor1State(screen1, motor1state);
@@ -658,7 +677,7 @@ void loop() {
     }
 
 
-    drawCC(screen1, ccActive, throttle);
+    // drawCC(screen1, ccActive, throttle);
 
 
     // prints whole can message
