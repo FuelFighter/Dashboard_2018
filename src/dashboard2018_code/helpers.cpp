@@ -77,27 +77,6 @@ void printEntireCANmsg(CAN_message_t msg, int id) {
     Serial.print("  ");
 }
 
-void printSpecificCANcontent(CAN_message_t msg, const float& speedVal, const float& voltage, const float& current) {
-    if (msg.id == MOTOR_1_STATUS_CAN_ID) {
-        Serial.print(" >> M1 ");
-        Serial.print(msg.buf[4]);
-        Serial.print("-");
-        Serial.print(speedVal);
-    }
-    else if (msg.id == MOTOR_2_STATUS_CAN_ID) {
-        Serial.print(" >> M2 ");
-        Serial.print(msg.buf[4]);
-        Serial.print("-");
-        Serial.print(speedVal);
-    }
-    else if (msg.id == BMS_VOLT_CURRENT_CAN_ID) {
-        Serial.print(" >> BMS V: ");
-        Serial.print(voltage);
-        Serial.print(" I: ");
-        Serial.print(current);
-    }
-}
-
 void printTXmsg(CAN_message_t txmsg) {
     Serial.print("  TX:");
     Serial.print(txmsg.id);

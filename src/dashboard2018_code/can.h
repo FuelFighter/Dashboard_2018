@@ -13,6 +13,8 @@
 #define MOTOR_1_STATUS_CAN_ID 0x250
 #define MOTOR_2_STATUS_CAN_ID 0x260
 #define BMS_VOLT_CURRENT_CAN_ID 0x444
+#define E_CLUTCH_1_CAN_ID 0x120
+#define E_CLUTCH_2_CAN_ID 0x220
 
 static const int CAN_LEN = 25;  // bits
 

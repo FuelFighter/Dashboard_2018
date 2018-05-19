@@ -125,6 +125,8 @@ int motor2state = -1;
 
 int motor1temp = 0;
 int motor2temp = 0;
+int motor1temp_old = 0;
+int motor2temp_old = 0;
 
 int motor1clutch = 0;
 int motor2clutch = 0;
@@ -135,6 +137,7 @@ double motor2current = 0;
 int throttle = 0;
 int throttleRaw = 0;
 static const int THROTTLE_HIGH = 100;
+static const int REGEN_HIGH = 100;
 
 int regen = 0;  // amount of regen braking
 int regenRaw = 0;
@@ -148,7 +151,6 @@ volatile uint8_t buttons;
 
 volatile bool brakeEnabled = false;
 
-float current = 0;
 float voltage = 0;
 
 const bool CC_ENABLED = false;
@@ -280,7 +282,6 @@ void initPins() {
 
 void reset() {
     lapCount = 1;
-    newLap = true;
 
     for (int i = 0; i < TOTAL_LAPS; ++i) {
         lapTimes[i] = 0;
@@ -289,7 +290,13 @@ void reset() {
     minutesRemaining = MINUTES_TOTAL;
     secondCounter = 0;
     minuteCounterMillis = 0;
+    lapTimeMillis = 0;
 
+    drawTimeLeft(screen2, minutesRemaining);
+    drawLapTime(screen1, lapTimeMillis / 1000);
+
+    newLap = true;
+    screen2.refresh();
     Serial.print("  RESET!!  ");
 }
 
@@ -397,7 +404,6 @@ void readRegen() {
     static const int REGEN_RAW_LOW  = 436;
     static const int REGEN_RAW_HIGH = 542;
     static const int REGEN_LOW  = 0;
-    static const int REGEN_HIGH = 100;
 
     regenRaw = analogRead(PIN_POT_LEFT);
     regen = map(regenRaw, REGEN_RAW_LOW, REGEN_RAW_HIGH, REGEN_LOW, REGEN_HIGH);
@@ -518,6 +524,27 @@ void displayLapTime(const volatile int& lapTimeMillis) {
     }
 }
 
+void parseMotor1msg(const CAN_message_t& msg) {
+    motor1state = msg.buf[0];
+    motor1speed = msg.buf[6] / SPEED_SCALAR;
+    motor1current = msg.buf[1] / CURRENT_SCALAR;
+    motor1temp = msg.buf[7];
+}
+
+void parseMotor2msg(const CAN_message_t& msg) {
+    motor2state = msg.buf[0];
+    motor2speed = msg.buf[6] / SPEED_SCALAR;
+    motor2current = msg.buf[1] / CURRENT_SCALAR;
+    motor2temp = msg.buf[7];
+}
+
+void parseClutch1msg(const CAN_message_t& msg) {
+    motor1clutch = msg.buf[2];
+}
+
+void parseClutch2msg(const CAN_message_t& msg) {
+    motor2clutch = msg.buf[2];
+}
 
 /* MAIN PROGRAM */
 void setup() {
@@ -608,7 +635,12 @@ void loop() {
     Serial.print("  ID2: "); Serial.print(rxmsg2.id);
 
 
-    barWidth = (float)throttle / THROTTLE_HIGH;
+    if (throttle > 0) 
+        barWidth = (float)throttle / THROTTLE_HIGH;
+    else if (regen > 0)
+        barWidth = (float)regen / REGEN_HIGH;
+    else
+        barWidth = 0;
     animateSliderBar(barWidth);
     displayLapTime(lapTimeMillis);
 
@@ -622,15 +654,11 @@ void loop() {
 
         if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {
             motorMsg = rxmsg1;
-            motor1state = motorMsg.buf[0];
-            motor1speed = motorMsg.buf[6] / SPEED_SCALAR;
-            motor1current = motorMsg.buf[1] / CURRENT_SCALAR;
+            parseMotor1msg(rxmsg1);
         }
         if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
             motorMsg = rxmsg2;
-            motor1state = motorMsg.buf[0];
-            motor1speed = motorMsg.buf[6] / SPEED_SCALAR;
-            motor1current = motorMsg.buf[1] / CURRENT_SCALAR;
+            parseMotor1msg(rxmsg2);
         }
     }
 
@@ -639,15 +667,11 @@ void loop() {
 
         if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) {
             motorMsg = rxmsg1;
-            motor2state = motorMsg.buf[0];
-            motor2speed = motorMsg.buf[6] / SPEED_SCALAR;
-            motor2current = motorMsg.buf[1] / CURRENT_SCALAR;
+            parseMotor2msg(rxmsg1);
         }
         if (rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
             motorMsg = rxmsg2;
-            motor2state = motorMsg.buf[0];
-            motor2speed = motorMsg.buf[6] / SPEED_SCALAR;
-            motor2current = motorMsg.buf[1] / CURRENT_SCALAR;
+            parseMotor2msg(rxmsg2);
         }
     }
 
@@ -655,13 +679,48 @@ void loop() {
         drawSpeed(screen1, motor1speed, motor2speed);
 
         voltage = (motorMsg.buf[3] << 8 | motorMsg.buf[2]) / VOLTAGE_SCALAR;
-        current = motorMsg.buf[1] / CURRENT_SCALAR;
 
         drawCurrentValue(screen1, motor1current, motor2current);
         drawVoltageValue(screen2, voltage);
 
         drawMotor1State(screen1, motor1state);
         drawMotor2State(screen1, motor2state);
+
+        static const int TEMP_CHANGE_THRESHOLD = 1;
+        if (abs(motor1temp - motor1temp_old) >= TEMP_CHANGE_THRESHOLD ||
+            abs(motor2temp - motor2temp_old) >= TEMP_CHANGE_THRESHOLD) {
+            motor1temp_old = motor1temp;
+            motor2temp_old = motor2temp;
+            drawTermperature(screen2, motor1temp, motor2temp);
+        }
+    }
+
+
+    bool clutchCANreceive = false;
+    if (rxmsg1.id == E_CLUTCH_1_CAN_ID || rxmsg2.id == E_CLUTCH_1_CAN_ID) {
+        clutchCANreceive = true;
+
+        if (rxmsg1.id == E_CLUTCH_1_CAN_ID) {
+            parseClutch1msg(rxmsg1);
+        }
+        if (rxmsg2.id == E_CLUTCH_1_CAN_ID) {
+            parseClutch1msg(rxmsg2);
+        }
+    }
+
+    if (rxmsg1.id == E_CLUTCH_2_CAN_ID || rxmsg2.id == E_CLUTCH_2_CAN_ID) {
+        clutchCANreceive = true;
+
+        if (rxmsg1.id == E_CLUTCH_2_CAN_ID) {
+            parseClutch2msg(rxmsg1);
+        }
+        if (rxmsg2.id == E_CLUTCH_2_CAN_ID) {
+            parseClutch2msg(rxmsg2);
+        }
+    }
+
+    if (clutchCANreceive) {
+        drawClutch(screen1, motor1clutch, motor2clutch);
     }
 
 
@@ -677,19 +736,10 @@ void loop() {
     }
 
 
-    // drawCC(screen1, ccActive, throttle);
-
-
     // prints whole can message
     if (debug) {
         printEntireCANmsg(rxmsg1, 1);
         printEntireCANmsg(rxmsg2, 2);
-    }
-
-    // prints specific content in can messages
-    if (debug) {
-        printSpecificCANcontent(rxmsg1, speedVal, voltage, current);
-        printSpecificCANcontent(rxmsg2, speedVal, voltage, current);
     }
 
     screen1.refresh();
