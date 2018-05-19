@@ -438,9 +438,15 @@ void readRegen() {
 
     if (regen > 0) {
         brakeEnabled = true;
+        drivingLightsBack(backLights);
     }
     else {
         brakeEnabled = false;
+
+        if (!drivingLightsEnabled) {
+            turnOffStrip(backLights);
+        }
+
     }
 
     Serial.print(" R: "); Serial.print(regenRaw); Serial.print("-"); Serial.print(regen); Serial.print(" ");    
