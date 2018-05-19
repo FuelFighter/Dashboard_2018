@@ -187,7 +187,7 @@ void drawClutch(Adafruit_SharpMem& screen, const int& motor1clutch, const int& m
 
 void drawTimeLeft(Adafruit_SharpMem& screen, const int& timeLeft) {
     const int     x = 180;
-    const uint8_t y = 125;
+    const uint8_t y = 145;
 
     int mins = timeLeft / 60;  // only interested in minutes
 
@@ -277,13 +277,30 @@ void drawTermperature(Adafruit_SharpMem& screen, const int& motor1temp, const in
     const int m2x = 245, m2y = 221;
 
     char motor1Str[8] = {0};
-    sprintf(motor1Str, "%d", motor1temp);
+    sprintf(motor1Str, "%d C", motor1temp);
 
     char motor2Str[8] = {0};
-    sprintf(motor2Str, "%d", motor2temp);
+    sprintf(motor2Str, "%d C", motor2temp);
 
     screen.setFont(&FreeMono12pt7b);
     screen.fillRect(m1x, m2y - 36, 60, 40, WHITE);
     drawString(screen, motor1Str, m1x, m1y, 1);
     drawString(screen, motor2Str, m2x, m2y, 1);
+}
+
+void drawTotalEnegry(Adafruit_SharpMem& screen, const float& motor1totalEnergy, const float& motor2totalEnergy) {
+    const int m1x = 233, m1y = 35;
+    const int m2x = 233, m2y = 55;
+
+    char motor1Str[16] = {0};
+    sprintf(motor1Str, "%.1f", motor1totalEnergy);
+
+    char motor2Str[16] = {0};
+    sprintf(motor2Str, "%.1f", motor2totalEnergy);
+
+    screen.setFont(&FreeMono9pt7b);
+    screen.fillRect(m1x, m2y - 30, 90, 34, WHITE);
+    drawString(screen, motor1Str, m1x, m1y, 1);
+    drawString(screen, motor2Str, m2x, m2y, 1);
+
 }

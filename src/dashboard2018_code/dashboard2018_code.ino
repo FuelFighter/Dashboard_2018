@@ -24,6 +24,7 @@
 #define SPEED_SCALAR   10.0
 #define CURRENT_SCALAR 10.0
 #define VOLTAGE_SCALAR 10.0
+#define ENERGY_SCALAR  10.0
 #define MAX_CURRENT    10.0
 
 #define LAP_BUTTON_COOLDOWN_SECS 5
@@ -65,8 +66,8 @@ bool debug = false;
 
 // RACE INFO
 #define TOTAL_LAPS 15
-#define OPTIMAL_CURRENT_VAL 30  // these are calculated beforehand
-#define OPTIMAL_BRAKE_VAL   30
+#define OPTIMAL_CURRENT_VAL 60  // these are calculated beforehand
+#define OPTIMAL_BRAKE_VAL   60
 
 /* PUBLIC VARIABLES */
 // SCREEN
@@ -114,11 +115,13 @@ double barWidth_prev = 0;
 
 volatile bool newLap = false;  // true when lap count button is pressed
 
-float speedVal = 0;
-float speedValPrev = 0;
+float motor1totalEnergy = 0;  // kJ
+float motor1totalEnergy_prev = 0;
+float motor2totalEnergy = 0;  // kJ
+float motor2totalEnergy_prev = 0;
+
 float motor1speed = 0;
 float motor2speed = 0;
-uint8_t messagesSinceLastSpeedUpdate = 0;
 
 int motor1state = -1;
 int motor2state = -1;
@@ -316,7 +319,7 @@ void initScreensContent() {
 
     const char mins[] = "mins";
     screen2.setFont(&FreeMono9pt7b);
-    drawString(screen2, mins, 260, 143, 1);
+    drawString(screen2, mins, 260, 163, 1);
 
     const char kmh[] = "km/h";
     screen1.setFont(&FreeMono9pt7b);
@@ -353,6 +356,14 @@ void initScreensContent() {
     drawString(screen1, c2, 6, 221, 1);
 
     drawClutch(screen1, motor1clutch, motor2clutch);
+
+    // setup for total energy
+    const char e1[] = "kJ1:";
+    const char e2[] = "kJ2:";
+    screen2.setFont(&FreeMono9pt7b);
+    drawString(screen2, e1, 192, 35, 1);
+    drawString(screen2, e2, 192, 55, 1);
+    drawTotalEnegry(screen2, motor1totalEnergy, motor2totalEnergy);
 }
 
 void initSteeringWheelLightShow() {
@@ -425,10 +436,18 @@ void readRegen() {
         ccActive = false;
     }
 
+    if (regen > 0) {
+        brakeEnabled = true;
+    }
+    else {
+        brakeEnabled = false;
+    }
+
     Serial.print(" R: "); Serial.print(regenRaw); Serial.print("-"); Serial.print(regen); Serial.print(" ");    
 }
 
-void animateSliderBar(const double& barWidth) {
+void animateSliderBar(const double& barWidth, bool inverted) {
+    // inverted: 0 (false): fill black, 1 (true): fill white
     // barWidth between 0..1
     static const uint8_t RBAR_HEIGHT = 108;
     static const uint8_t RBAR_WIDTH  = 123;
@@ -449,10 +468,10 @@ void animateSliderBar(const double& barWidth) {
             // leftmost
             calcXYHforBar(i, x, y, h);
             if (i < barWidth) {
-                screen1.fillRect(x, y, 2, h, BLACK);
+                screen1.fillRect(x, y, 2, h, inverted);
             }
             else {
-                screen1.fillRect(x, y, 2, h, WHITE);
+                screen1.fillRect(x, y, 2, h, !inverted);
             }
         }
     }
@@ -529,6 +548,8 @@ void parseMotor1msg(const CAN_message_t& msg) {
     motor1speed = msg.buf[6] / SPEED_SCALAR;
     motor1current = msg.buf[1] / CURRENT_SCALAR;
     motor1temp = msg.buf[7];
+
+    motor1totalEnergy = (msg.buf[5] << 8 | msg.buf[4]) / ENERGY_SCALAR;
 }
 
 void parseMotor2msg(const CAN_message_t& msg) {
@@ -536,6 +557,8 @@ void parseMotor2msg(const CAN_message_t& msg) {
     motor2speed = msg.buf[6] / SPEED_SCALAR;
     motor2current = msg.buf[1] / CURRENT_SCALAR;
     motor2temp = msg.buf[7];
+
+    motor2totalEnergy = (msg.buf[5] << 8 | msg.buf[4]) / ENERGY_SCALAR;
 }
 
 void parseClutch1msg(const CAN_message_t& msg) {
@@ -591,7 +614,6 @@ void loop() {
     readThrottle();
     readRegen();
 
-
     // Only send if deadman switch was unpressed less than 2 secs ago
     static const int DEADMAN_SWITCH_UNPRESSED_THRESHOLD = 2000;  // ms
     if (abs(millisStart - millisAtLastChange) <= DEADMAN_SWITCH_UNPRESSED_THRESHOLD) {
@@ -635,13 +657,18 @@ void loop() {
     Serial.print("  ID2: "); Serial.print(rxmsg2.id);
 
 
-    if (throttle > 0) 
+    bool inverted = false;
+    if (throttle > 0) {
         barWidth = (float)throttle / THROTTLE_HIGH;
-    else if (regen > 0)
-        barWidth = (float)regen / REGEN_HIGH;
-    else
+    }
+    else if (regen > 0) {
+        barWidth = 1 - (float)regen / REGEN_HIGH;
+        inverted = true;
+    }
+    else {
         barWidth = 0;
-    animateSliderBar(barWidth);
+    }
+    animateSliderBar(barWidth, inverted);
     displayLapTime(lapTimeMillis);
 
 
@@ -692,6 +719,16 @@ void loop() {
             motor1temp_old = motor1temp;
             motor2temp_old = motor2temp;
             drawTermperature(screen2, motor1temp, motor2temp);
+        }
+
+        static const int ENERGY_CHANGE_THRESHOLD = 1;  // kJ
+        if (abs(motor1totalEnergy - motor1totalEnergy_prev) >= ENERGY_CHANGE_THRESHOLD ||
+            abs(motor2totalEnergy - motor2totalEnergy_prev) >= ENERGY_CHANGE_THRESHOLD) {
+            motor1totalEnergy_prev = motor1totalEnergy;
+            motor2totalEnergy_prev = motor2totalEnergy;
+
+            drawTotalEnegry(screen2, motor1totalEnergy, motor2totalEnergy);
+            screen2.refresh();
         }
     }
 

@@ -57,5 +57,6 @@ void drawLapCount(Adafruit_SharpMem& screen, volatile const uint8_t& count, cons
 void drawBestAndAvgLapTime(Adafruit_SharpMem& screen, volatile const int* lapTimes, const uint8_t& size);
 void drawVoltageValue(Adafruit_SharpMem& screen, const double& voltageVal);
 void drawTermperature(Adafruit_SharpMem& screen, const int& motor1temp, const int& motor2temp);
+void drawTotalEnegry(Adafruit_SharpMem& screen, const float& motor1totalEnergy, const float& motor2totalEnergy);
 
 #endif
