@@ -128,8 +128,6 @@ int motor2state = -1;
 
 int motor1temp = 0;
 int motor2temp = 0;
-int motor1temp_old = 0;
-int motor2temp_old = 0;
 
 int motor1clutch = 0;
 int motor2clutch = 0;
@@ -308,12 +306,7 @@ void initScreensContent() {
     drawBackground(screen1, true);
     drawBackground(screen2, false);
 
-    // Draw static text on screen 2 (left)
-    const char v[] = "V";
-    screen2.setFont(&FreeMono12pt7b);
-    drawString(screen2, v, 145, 60, 1);
     drawTimeLeft(screen2, minutesRemaining);
-
     drawVoltageValue(screen2, voltage);
     drawCurrentValue(screen1, motor1current, motor2current);
 
@@ -346,7 +339,7 @@ void initScreensContent() {
     drawString(screen2, t1, 204, 201, 1);
     drawString(screen2, t2, 204, 221, 1);
 
-    drawTermperature(screen2, motor1temp, motor2temp);
+    drawTemperature(screen2, motor1temp, motor2temp);
 
     // setup for motor clutch
     const char c1[] = "C1:";
@@ -658,10 +651,11 @@ void loop() {
     const int CAN_LEN = 25;
     char canBuffer[CAN_LEN * 2] = {0};
     readCANfromUARTtoBuffer(canBuffer);
+    // Serial.print(canBuffer);
     parseUARTbufferToCANmessage(canBuffer, rxmsg1, rxmsg2);
-    Serial.print(" ID1: ");  Serial.print(rxmsg1.id);
-    Serial.print("  ID2: "); Serial.print(rxmsg2.id);
-
+    // Serial.print(canBuffer);
+    // Serial.print(" ID1: ");  Serial.print(rxmsg1.id);
+    //Serial.print("  ID2: "); Serial.print(rxmsg2.id);
 
     bool inverted = false;
     if (throttle > 0) {
@@ -682,30 +676,30 @@ void loop() {
     CAN_message_t motorMsg;
 
     // get correct message
-    if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID || rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
+    if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {  // || rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
         motorCANreceived = true;
 
         if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {
             motorMsg = rxmsg1;
             parseMotor1msg(rxmsg1);
         }
-        if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
-            motorMsg = rxmsg2;
-            parseMotor1msg(rxmsg2);
-        }
+        // if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
+        //     motorMsg = rxmsg2;
+        //     parseMotor1msg(rxmsg2);
+        // }
     }
 
-    if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID || rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
+    if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) { // || rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
         motorCANreceived = true;
 
         if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) {
             motorMsg = rxmsg1;
             parseMotor2msg(rxmsg1);
         }
-        if (rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
-            motorMsg = rxmsg2;
-            parseMotor2msg(rxmsg2);
-        }
+        // if (rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
+        //     motorMsg = rxmsg2;
+        //     parseMotor2msg(rxmsg2);
+        // }
     }
 
     if (motorCANreceived) {
@@ -719,15 +713,9 @@ void loop() {
         drawMotor1State(screen1, motor1state);
         drawMotor2State(screen1, motor2state);
 
-        static const int TEMP_CHANGE_THRESHOLD = 1;
-        if (abs(motor1temp - motor1temp_old) >= TEMP_CHANGE_THRESHOLD ||
-            abs(motor2temp - motor2temp_old) >= TEMP_CHANGE_THRESHOLD) {
-            motor1temp_old = motor1temp;
-            motor2temp_old = motor2temp;
-            drawTermperature(screen2, motor1temp, motor2temp);
-        }
+        drawTemperature(screen2, motor1temp, motor2temp);
 
-        static const int ENERGY_CHANGE_THRESHOLD = 1;  // kJ
+        static const int ENERGY_CHANGE_THRESHOLD = 2;  // kJ
         if (abs(motor1totalEnergy - motor1totalEnergy_prev) >= ENERGY_CHANGE_THRESHOLD ||
             abs(motor2totalEnergy - motor2totalEnergy_prev) >= ENERGY_CHANGE_THRESHOLD) {
             motor1totalEnergy_prev = motor1totalEnergy;
@@ -740,26 +728,26 @@ void loop() {
 
 
     bool clutchCANreceive = false;
-    if (rxmsg1.id == E_CLUTCH_1_CAN_ID || rxmsg2.id == E_CLUTCH_1_CAN_ID) {
+    if (rxmsg1.id == E_CLUTCH_1_CAN_ID) { // || rxmsg2.id == E_CLUTCH_1_CAN_ID) {
         clutchCANreceive = true;
 
         if (rxmsg1.id == E_CLUTCH_1_CAN_ID) {
             parseClutch1msg(rxmsg1);
         }
-        if (rxmsg2.id == E_CLUTCH_1_CAN_ID) {
-            parseClutch1msg(rxmsg2);
-        }
+        // if (rxmsg2.id == E_CLUTCH_1_CAN_ID) {
+        //     parseClutch1msg(rxmsg2);
+        // }
     }
 
-    if (rxmsg1.id == E_CLUTCH_2_CAN_ID || rxmsg2.id == E_CLUTCH_2_CAN_ID) {
+    if (rxmsg1.id == E_CLUTCH_2_CAN_ID) {  // || rxmsg2.id == E_CLUTCH_2_CAN_ID) {
         clutchCANreceive = true;
 
         if (rxmsg1.id == E_CLUTCH_2_CAN_ID) {
             parseClutch2msg(rxmsg1);
         }
-        if (rxmsg2.id == E_CLUTCH_2_CAN_ID) {
-            parseClutch2msg(rxmsg2);
-        }
+        // if (rxmsg2.id == E_CLUTCH_2_CAN_ID) {
+        //     parseClutch2msg(rxmsg2);
+        // }
     }
 
     if (clutchCANreceive) {
@@ -778,11 +766,16 @@ void loop() {
         screen2.refresh();
     }
 
+    if (secondCounter >= 30) {
+        // this is just to update the screen every half a minute 
+        screen2.refresh(); 
+    }
+
 
     // prints whole can message
     if (debug) {
         printEntireCANmsg(rxmsg1, 1);
-        printEntireCANmsg(rxmsg2, 2);
+        // printEntireCANmsg(rxmsg2, 2);
     }
 
     screen1.refresh();
@@ -962,6 +955,7 @@ void blankButtonPressed_ISR() {
 }
 
 void gear2_ISR() {
+    // up
     int state = digitalRead(PIN_GEAR_2);
 
     if (state == HIGH) {  // RISING -- is unpressed
@@ -975,6 +969,7 @@ void gear2_ISR() {
 }
 
 void gear1_ISR() {
+    // down
     int state = digitalRead(PIN_GEAR_1);
 
     if (state == HIGH) {  // RISING -- is unpressed

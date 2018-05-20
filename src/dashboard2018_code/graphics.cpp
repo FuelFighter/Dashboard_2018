@@ -51,10 +51,10 @@ void drawSpeed(Adafruit_SharpMem& screen, const float& motor1speed, const float&
     const int m1x = 6, m1y = 100;
     const int m2x = 6, m2y = 150;
 
-    char motor1Str[8] = {0};
+    char motor1Str[16] = {0};
     sprintf(motor1Str, "%0.1f", motor1speed);
 
-    char motor2Str[8] = {0};
+    char motor2Str[16] = {0};
     sprintf(motor2Str, "%0.1f", motor2speed);
 
     screen.setFont(&FreeMono24pt7b);
@@ -83,10 +83,10 @@ void drawCurrentValue(Adafruit_SharpMem& screen, const double& motor1current, co
     const int m1x = 198, m1y = 112;
     const int m2x = 192, m2y = 148;
 
-    char motor1Str[8] = {0};
+    char motor1Str[16] = {0};
     sprintf(motor1Str, "%-4.2f", motor1current);
 
-    char motor2Str[8] = {0};
+    char motor2Str[16] = {0};
     sprintf(motor2Str, "%-4.2f", motor2current);
 
     screen.setFont(&FreeMono12pt7b);
@@ -130,7 +130,7 @@ void drawMotor1State(Adafruit_SharpMem& screen, const int& motor1) {
     const int x = 39,
               y = 27;
 
-    char stateStr[10] = {0};
+    char stateStr[16] = {0};
     getStateString(motor1, stateStr);
 
     screen.setFont(&FreeMono9pt7b);
@@ -142,7 +142,7 @@ void drawMotor2State(Adafruit_SharpMem& screen, const int& motor2) {
     const int x = 39,
               y = 41;
 
-    char stateStr[10] = {0};
+    char stateStr[16] = {0};
     getStateString(motor2, stateStr);
 
     screen.setFont(&FreeMono9pt7b);
@@ -171,10 +171,10 @@ void drawClutch(Adafruit_SharpMem& screen, const int& motor1clutch, const int& m
     const int m1x = 47, m1y = 201;
     const int m2x = 47, m2y = 221;
 
-    char motor1Str[8] = {0};
+    char motor1Str[16] = {0};
     sprintf(motor1Str, "%d", motor1clutch);
 
-    char motor2Str[8] = {0};
+    char motor2Str[16] = {0};
     sprintf(motor2Str, "%d", motor2clutch);
 
     screen.setFont(&FreeMono12pt7b);
@@ -272,18 +272,18 @@ void drawVoltageValue(Adafruit_SharpMem& screen, const double& voltageVal) {
     drawString(screen, str, x, y, 2);
 }
 
-void drawTermperature(Adafruit_SharpMem& screen, const int& motor1temp, const int& motor2temp) {
+void drawTemperature(Adafruit_SharpMem& screen, const int& motor1temp, const int& motor2temp) {
     const int m1x = 245, m1y = 201;
     const int m2x = 245, m2y = 221;
 
-    char motor1Str[8] = {0};
+    char motor1Str[16] = {0};
     sprintf(motor1Str, "%d C", motor1temp);
 
-    char motor2Str[8] = {0};
+    char motor2Str[16] = {0};
     sprintf(motor2Str, "%d C", motor2temp);
 
     screen.setFont(&FreeMono12pt7b);
-    screen.fillRect(m1x, m2y - 36, 60, 40, WHITE);
+    screen.fillRect(m1x, m2y - 36, 90, 40, WHITE);
     drawString(screen, motor1Str, m1x, m1y, 1);
     drawString(screen, motor2Str, m2x, m2y, 1);
 }
