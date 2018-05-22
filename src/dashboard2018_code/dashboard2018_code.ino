@@ -86,7 +86,7 @@ Adafruit_NeoPixel swheelLights(NUM_SWHEEL_LIGHTS, PIN_SWHEEL_LIGHT, NEO_GRBW + N
 CAN_message_t txmsg, rxmsg1, rxmsg2;
 TimerOne t1;
 String inputString = "";
-bool   inputComplete = false;
+volatile bool   inputComplete = false;
 
 // TIMING
 unsigned long millisStart = millis();
@@ -549,6 +549,8 @@ void parseMotor1msg(const CAN_message_t& msg) {
     // there are a lot of checks for how much something is changed in these functions.
     // i'm certain there's a better way to do this, like for ex. a low pass filter or something.
     // but this works and i'll leave it as is. i don't dare fixing something that works. 
+    // after updated can reading, this isn't really needed anymore, but it's still better with than without it. 
+
     motor1state = msg.buf[0];
     static const int NO_MESSAGE_COUNT_MAX = 3;
     
@@ -563,7 +565,6 @@ void parseMotor1msg(const CAN_message_t& msg) {
     else {
         ++countSinceLastChange_speed;
 
-        // static const int NO_MESSAGE_COUNT_MAX = 4;
         if (countSinceLastChange_speed >= NO_MESSAGE_COUNT_MAX) {
             // if no message has been accepted for x messages, update anyways
             motor1speed = speed;
@@ -589,7 +590,6 @@ void parseMotor1msg(const CAN_message_t& msg) {
     else {
         ++countSinceLastChange_temperature;
 
-        // static const int NO_MESSAGE_COUNT_MAX = 3;  // this is so low since this functions isn't called on every received message
         if (countSinceLastChange_temperature >= NO_MESSAGE_COUNT_MAX) {
             // if no message has been accepted for x messages, update anyways
             motor1temp = temperature;
@@ -607,7 +607,6 @@ void parseMotor1msg(const CAN_message_t& msg) {
     else {
         ++countSinceLastChange_energy;
 
-        // static const int NO_MESSAGE_COUNT_MAX = 3;
         if(countSinceLastChange_energy >= NO_MESSAGE_COUNT_MAX) {
             motor1totalEnergy = energy_temp;
             countSinceLastChange_energy = 0;
@@ -618,7 +617,8 @@ void parseMotor1msg(const CAN_message_t& msg) {
 void parseMotor2msg(const CAN_message_t& msg) {
     // there are a lot of checks for how much something is changed in these functions.
     // i'm certain there's a better way to do this, like for ex. a low pass filter or something.
-    // but this works and i'll leave it as is. i don't dare fixing something that works. 
+    // but this works and i'll leave it as is. i don't dare fixing something that works.
+
     motor2state = msg.buf[0];
     static const int NO_MESSAGE_COUNT_MAX = 3;
     
@@ -633,7 +633,6 @@ void parseMotor2msg(const CAN_message_t& msg) {
     else {
         ++countSinceLastChange_speed;
 
-        // static const int NO_MESSAGE_COUNT_MAX = 4;
         if (countSinceLastChange_speed >= NO_MESSAGE_COUNT_MAX) {
             // if no message has been accepted for x messages, update anyways
             motor2speed = speed;
@@ -659,7 +658,6 @@ void parseMotor2msg(const CAN_message_t& msg) {
     else {
         ++countSinceLastChange_temperature;
 
-        // static const int NO_MESSAGE_COUNT_MAX = 3;
         if (countSinceLastChange_temperature >= NO_MESSAGE_COUNT_MAX) {
             // if no message has been accepted for x messages, update anyways
             motor2temp = temperature;
@@ -677,7 +675,6 @@ void parseMotor2msg(const CAN_message_t& msg) {
     else {
         ++countSinceLastChange_energy;
 
-        // static const int NO_MESSAGE_COUNT_MAX = 3;
         if(countSinceLastChange_energy >= NO_MESSAGE_COUNT_MAX) {
             motor2totalEnergy = energy_temp;
             countSinceLastChange_energy = 0;
@@ -687,18 +684,10 @@ void parseMotor2msg(const CAN_message_t& msg) {
 
 void parseClutch1msg(const CAN_message_t& msg) {
     motor1clutch = msg.buf[2];
-
-    // if (motor1clutch != 0 || motor1clutch != 1 || motor1clutch != 2) {
-    //     motor1clutch = -1;  // TODO: change later. this is a bad quick fix
-    // }
 }
 
 void parseClutch2msg(const CAN_message_t& msg) {
     motor2clutch = msg.buf[2];
-
-    // if (motor2clutch != 0 || motor2clutch != 1 || motor2clutch != 2) {
-    //     motor2clutch = -1;  // TODO: change later. this is a bad quick fix
-    // }
 }
 
 /* MAIN PROGRAM */
@@ -781,15 +770,122 @@ void loop() {
     doLightStuffLikeBlinkLightsAndDrivingLightsOnOrOff();
 
 
-    const int CAN_LEN = 25;
-    char canBuffer[CAN_LEN * 2] = {0};
-    readCANfromUARTtoBuffer(canBuffer);
-    Serial.print(canBuffer);
-    parseUARTbufferToCANmessage(canBuffer, rxmsg1, rxmsg2);
+    // const int CAN_LEN = 25;
+    // char canBuffer[CAN_LEN * 2] = {0};
+    // readCANfromUARTtoBuffer(canBuffer);
+    // // Serial.print(canBuffer);
+    // parseUARTbufferToCANmessage(canBuffer, rxmsg1, rxmsg2);
     // Serial.print(canBuffer);
     // Serial.print(" ID1: ");  Serial.print(rxmsg1.id);
     //Serial.print("  ID2: "); Serial.print(rxmsg2.id);
+    
+    //while (!inputComplete) { Serial.print("\r\r\r\r"); };  // wait for input to complete. need something in loop for it to not crash??? why? 
+    if (inputComplete) {
+        const char * canBuffer = inputString.c_str();
+        inputString = "";
+        inputComplete = false;
+        parseUARTbufferToCANmessage(canBuffer, rxmsg1, rxmsg2);
 
+        bool motorCANreceived = false;
+        CAN_message_t motorMsg;
+
+        // get correct message
+        if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {  // || rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
+            motorCANreceived = true;
+
+            if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {
+                motorMsg = rxmsg1;
+                parseMotor1msg(rxmsg1);
+            }
+            // if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
+            //     motorMsg = rxmsg2;
+            //     parseMotor1msg(rxmsg2);
+            // }
+        }
+
+        if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) { // || rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
+            motorCANreceived = true;
+
+            if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) {
+                motorMsg = rxmsg1;
+                parseMotor2msg(rxmsg1);
+            }
+            // if (rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
+            //     motorMsg = rxmsg2;
+            //     parseMotor2msg(rxmsg2);
+            // }
+        }
+
+        if (motorCANreceived) {
+            drawSpeed(screen1, motor1speed, motor2speed);
+
+
+            int voltage_temp = (motorMsg.buf[3] << 8 | motorMsg.buf[2]) / VOLTAGE_SCALAR;
+            static const int VOLTAGE_MAX_CHANGE = 8;
+            static int countSinceLastChange_voltage = 0;
+            if (abs(voltage - voltage_temp) <= VOLTAGE_MAX_CHANGE) {
+                voltage = voltage_temp;
+                countSinceLastChange_voltage = 0;
+            }
+            else {
+                ++countSinceLastChange_voltage;
+
+                static const int NO_MESSAGE_COUNT_MAX = 4;
+                if(countSinceLastChange_voltage >= NO_MESSAGE_COUNT_MAX) {
+                    voltage = voltage_temp;
+                    countSinceLastChange_voltage = 0;
+                }
+            }
+
+            drawCurrentValue(screen1, motor1current, motor2current);
+            drawVoltageValue(screen2, voltage);
+
+            drawMotor1State(screen1, motor1state);
+            drawMotor2State(screen1, motor2state);
+
+            drawTemperature(screen2, motor1temp, motor2temp);
+
+            static const double ENERGY_CHANGE_MIN = 1.2;  // kJ
+            if (abs(motor1totalEnergy - motor1totalEnergy_prev) >= ENERGY_CHANGE_MIN ||
+                abs(motor2totalEnergy - motor2totalEnergy_prev) >= ENERGY_CHANGE_MIN) {
+                motor1totalEnergy_prev = motor1totalEnergy;
+                motor2totalEnergy_prev = motor2totalEnergy;
+
+                drawTotalEnegry(screen2, motor1totalEnergy, motor2totalEnergy);
+                screen2.refresh();
+            }
+        }
+
+
+        bool clutchCANreceive = false;
+        if (rxmsg1.id == E_CLUTCH_1_CAN_ID) { // || rxmsg2.id == E_CLUTCH_1_CAN_ID) {
+            clutchCANreceive = true;
+
+            if (rxmsg1.id == E_CLUTCH_1_CAN_ID) {
+                parseClutch1msg(rxmsg1);
+            }
+            // if (rxmsg2.id == E_CLUTCH_1_CAN_ID) {
+            //     parseClutch1msg(rxmsg2);
+            // }
+        }
+
+        if (rxmsg1.id == E_CLUTCH_2_CAN_ID) {  // || rxmsg2.id == E_CLUTCH_2_CAN_ID) {
+            clutchCANreceive = true;
+
+            if (rxmsg1.id == E_CLUTCH_2_CAN_ID) {
+                parseClutch2msg(rxmsg1);
+            }
+            // if (rxmsg2.id == E_CLUTCH_2_CAN_ID) {
+            //     parseClutch2msg(rxmsg2);
+            // }
+        }
+
+        if (clutchCANreceive) {
+            drawClutch(screen1, motor1clutch, motor2clutch);
+        }
+    }
+
+    // throttle bar
     bool inverted = false;
     if (throttle > 0) {
         barWidth = (float)throttle / THROTTLE_HIGH;
@@ -803,105 +899,6 @@ void loop() {
     }
     animateSliderBar(barWidth, inverted);
     displayLapTime(lapTimeMillis);
-
-
-    bool motorCANreceived = false;
-    CAN_message_t motorMsg;
-
-    // get correct message
-    if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {  // || rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
-        motorCANreceived = true;
-
-        if (rxmsg1.id == MOTOR_1_STATUS_CAN_ID) {
-            motorMsg = rxmsg1;
-            parseMotor1msg(rxmsg1);
-        }
-        // if (rxmsg2.id == MOTOR_1_STATUS_CAN_ID) {
-        //     motorMsg = rxmsg2;
-        //     parseMotor1msg(rxmsg2);
-        // }
-    }
-
-    if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) { // || rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
-        motorCANreceived = true;
-
-        if (rxmsg1.id == MOTOR_2_STATUS_CAN_ID) {
-            motorMsg = rxmsg1;
-            parseMotor2msg(rxmsg1);
-        }
-        // if (rxmsg2.id == MOTOR_2_STATUS_CAN_ID) {
-        //     motorMsg = rxmsg2;
-        //     parseMotor2msg(rxmsg2);
-        // }
-    }
-
-    if (motorCANreceived) {
-        drawSpeed(screen1, motor1speed, motor2speed);
-
-
-        int voltage_temp = (motorMsg.buf[3] << 8 | motorMsg.buf[2]) / VOLTAGE_SCALAR;
-        static const int VOLTAGE_MAX_CHANGE = 8;
-        static int countSinceLastChange_voltage = 0;
-        if (abs(voltage - voltage_temp) <= VOLTAGE_MAX_CHANGE) {
-            voltage = voltage_temp;
-            countSinceLastChange_voltage = 0;
-        }
-        else {
-            ++countSinceLastChange_voltage;
-
-            static const int NO_MESSAGE_COUNT_MAX = 5;
-            if(countSinceLastChange_voltage >= NO_MESSAGE_COUNT_MAX) {
-                voltage = voltage_temp;
-                countSinceLastChange_voltage = 0;
-            }
-        }
-
-        drawCurrentValue(screen1, motor1current, motor2current);
-        drawVoltageValue(screen2, voltage);
-
-        drawMotor1State(screen1, motor1state);
-        drawMotor2State(screen1, motor2state);
-
-        drawTemperature(screen2, motor1temp, motor2temp);
-
-        static const double ENERGY_CHANGE_MIN = 1.2;  // kJ
-        if (abs(motor1totalEnergy - motor1totalEnergy_prev) >= ENERGY_CHANGE_MIN ||
-            abs(motor2totalEnergy - motor2totalEnergy_prev) >= ENERGY_CHANGE_MIN) {
-            motor1totalEnergy_prev = motor1totalEnergy;
-            motor2totalEnergy_prev = motor2totalEnergy;
-
-            drawTotalEnegry(screen2, motor1totalEnergy, motor2totalEnergy);
-            screen2.refresh();
-        }
-    }
-
-
-    bool clutchCANreceive = false;
-    if (rxmsg1.id == E_CLUTCH_1_CAN_ID) { // || rxmsg2.id == E_CLUTCH_1_CAN_ID) {
-        clutchCANreceive = true;
-
-        if (rxmsg1.id == E_CLUTCH_1_CAN_ID) {
-            parseClutch1msg(rxmsg1);
-        }
-        // if (rxmsg2.id == E_CLUTCH_1_CAN_ID) {
-        //     parseClutch1msg(rxmsg2);
-        // }
-    }
-
-    if (rxmsg1.id == E_CLUTCH_2_CAN_ID) {  // || rxmsg2.id == E_CLUTCH_2_CAN_ID) {
-        clutchCANreceive = true;
-
-        if (rxmsg1.id == E_CLUTCH_2_CAN_ID) {
-            parseClutch2msg(rxmsg1);
-        }
-        // if (rxmsg2.id == E_CLUTCH_2_CAN_ID) {
-        //     parseClutch2msg(rxmsg2);
-        // }
-    }
-
-    if (clutchCANreceive) {
-        drawClutch(screen1, motor1clutch, motor2clutch);
-    }
 
 
     // minutes remaining
@@ -1150,4 +1147,19 @@ void t1_OVF_ISR() {
     // if (deadmanSwitchIsPressed) {
     sendCANoverUART(txmsg);
     // Serial.print("  SENT CAN  ");
+}
+
+void serialEvent3() {
+    // this controls the reading from uart
+    while (Serial3.available() && !inputComplete) {
+        // get the new byte:
+        char inChar = (char)Serial3.read();
+        // add it to the inputString:
+        inputString += inChar;
+        // if the incoming character is a newline, set a flag so the main loop can
+        // do something about it:
+        if (inChar == '\n') {
+            inputComplete = true;
+        }
+    }
 }

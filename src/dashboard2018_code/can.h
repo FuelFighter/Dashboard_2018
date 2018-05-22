@@ -36,6 +36,6 @@ void readCANfromUARTtoBuffer(char out[]);
 void sendCANoverUART(CAN_message_t& msg);
 
 // Parses the UART buffer to a CAN_message_t object for easier reading. 
-void parseUARTbufferToCANmessage(char bufferCorrected[], CAN_message_t& msg1, CAN_message_t& msg2);
+void parseUARTbufferToCANmessage(const char bufferCorrected[], CAN_message_t& msg1, CAN_message_t& msg2);
 
 #endif

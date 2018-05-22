@@ -63,20 +63,6 @@ void correctCANbuffer(char buf[], char out[]) {
 //     }
 // }
 
-// void serialEvent3() {
-//     while (Serial3.available()) {
-//         // get the new byte:
-//         char inChar = (char)Serial3.read();
-//         // add it to the inputString:
-//         inputString += inChar;
-//         // if the incoming character is a newline, set a flag so the main loop can
-//         // do something about it:
-//         if (inChar == '\n') {
-//             inputComplete = true;
-//         }
-//     }
-// }
-
 void readCANfromUARTtoBuffer(char out[]) {
     char buffer[CAN_LEN] = {0};
     char bufferCorrected[CAN_LEN * 2] = {0};
@@ -119,7 +105,7 @@ void sendCANoverUART(CAN_message_t& msg) {
     Serial3.print(msgBuffer);
 }
 
-void parseUARTbufferToCANmessage(char bufferCorrected[], CAN_message_t& msg1, CAN_message_t& msg2) {
+void parseUARTbufferToCANmessage(const char bufferCorrected[], CAN_message_t& msg1, CAN_message_t& msg2) {
     // received message parsing
     // msg1
     msg1.id = asciiToDec(bufferCorrected[1]) << 8 | asciiToDec(bufferCorrected[2]) << 4 | asciiToDec(bufferCorrected[3]) << 0;
