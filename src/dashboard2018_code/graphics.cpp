@@ -213,10 +213,12 @@ void drawLapCount(Adafruit_SharpMem& screen, volatile const uint8_t& count, cons
 
 void drawBestAndAvgLapTime(Adafruit_SharpMem& screen, volatile const int* lapTimes, const uint8_t& size) {
     long avg = 0;  // millis
-    int min = 0xffff;  // millis
+    long sum = 0;
+    int min = lapTimes[0];  // millis
     uint8_t count = 0;
     for (int i = 0; i < size; ++i) {
         int elem = lapTimes[i];
+        sum += elem;
 
         if (elem > 0) {
             ++count;
@@ -228,15 +230,14 @@ void drawBestAndAvgLapTime(Adafruit_SharpMem& screen, volatile const int* lapTim
         }
     }
     avg = avg / count;
-    if (min >= 0xfff0) min = 0;  // to get zeros if nothing is recorded yet
 
 
     // best lap time
     uint8_t x = 38;
     uint8_t y = 172;
 
-    int mins = (min / 1000) / 60;
-    int secs = (min / 1000) % 60;
+    int mins = (sum / 1000) / 60;
+    int secs = (sum / 1000) % 60;
 
     char str[16] = {0};
     sprintf(str, "%02u:%02u", mins, secs);

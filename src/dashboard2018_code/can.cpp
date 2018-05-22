@@ -63,6 +63,20 @@ void correctCANbuffer(char buf[], char out[]) {
 //     }
 // }
 
+// void serialEvent3() {
+//     while (Serial3.available()) {
+//         // get the new byte:
+//         char inChar = (char)Serial3.read();
+//         // add it to the inputString:
+//         inputString += inChar;
+//         // if the incoming character is a newline, set a flag so the main loop can
+//         // do something about it:
+//         if (inChar == '\n') {
+//             inputComplete = true;
+//         }
+//     }
+// }
+
 void readCANfromUARTtoBuffer(char out[]) {
     char buffer[CAN_LEN] = {0};
     char bufferCorrected[CAN_LEN * 2] = {0};
@@ -71,7 +85,7 @@ void readCANfromUARTtoBuffer(char out[]) {
         Serial3.readBytes(buffer, CAN_LEN);
     }
 
-    // Serial.print(buffer);
+    Serial.print(buffer);
 
     int i_opensquare = -1;
     int i_closedsquare = -1;
@@ -101,6 +115,7 @@ void sendCANoverUART(CAN_message_t& msg) {
             msg.id, msg.len, msg.buf[0], msg.buf[1], msg.buf[2], msg.buf[3], msg.buf[4],
             msg.buf[5], msg.buf[6], msg.buf[7]);
 
+
     Serial3.print(msgBuffer);
 }
 
@@ -110,6 +125,39 @@ void parseUARTbufferToCANmessage(char bufferCorrected[], CAN_message_t& msg1, CA
     msg1.id = asciiToDec(bufferCorrected[1]) << 8 | asciiToDec(bufferCorrected[2]) << 4 | asciiToDec(bufferCorrected[3]) << 0;
     msg1.len = asciiToDec(bufferCorrected[5]);
 
+    // for (int i = 0; i < msg1.len; ++i) {
+    //     switch (i) {
+    //         case 0:
+    //             msg1.buf[0] = (asciiToDec(bufferCorrected[ 7])) << 4 | (asciiToDec(bufferCorrected[ 8]));
+    //             break;
+    //         case 1:        
+    //             msg1.buf[1] = (asciiToDec(bufferCorrected[ 9])) << 4 | (asciiToDec(bufferCorrected[10]));
+    //             break;
+    //         case 2:
+    //             msg1.buf[2] = (asciiToDec(bufferCorrected[11])) << 4 | (asciiToDec(bufferCorrected[12]));
+    //             break;
+    //         case 3:
+    //             msg1.buf[3] = (asciiToDec(bufferCorrected[13])) << 4 | (asciiToDec(bufferCorrected[14]));
+    //             break;
+    //         case 4:
+    //             msg1.buf[4] = (asciiToDec(bufferCorrected[15])) << 4 | (asciiToDec(bufferCorrected[16]));
+    //             break;
+    //         case 5:
+    //             msg1.buf[5] = (asciiToDec(bufferCorrected[17])) << 4 | (asciiToDec(bufferCorrected[18]));
+    //             break;
+    //         case 6:
+    //             msg1.buf[6] = (asciiToDec(bufferCorrected[19])) << 4 | (asciiToDec(bufferCorrected[20]));
+    //             break;
+    //         case 7:
+    //             msg1.buf[7] = (asciiToDec(bufferCorrected[21])) << 4 | (asciiToDec(bufferCorrected[22]));
+    //         default:
+    //             msg1.buf[i] = 0;
+    //     }
+
+    //     // I know this is terribly stupid and ugly code. 
+    //     // Not going to figure out a smarter way, though. So deal with it.
+    // }
+
     msg1.buf[7] = (asciiToDec(bufferCorrected[21])) << 4 | (asciiToDec(bufferCorrected[22]));
     msg1.buf[6] = (asciiToDec(bufferCorrected[19])) << 4 | (asciiToDec(bufferCorrected[20]));
     msg1.buf[5] = (asciiToDec(bufferCorrected[17])) << 4 | (asciiToDec(bufferCorrected[18]));
@@ -118,6 +166,10 @@ void parseUARTbufferToCANmessage(char bufferCorrected[], CAN_message_t& msg1, CA
     msg1.buf[2] = (asciiToDec(bufferCorrected[11])) << 4 | (asciiToDec(bufferCorrected[12]));
     msg1.buf[1] = (asciiToDec(bufferCorrected[ 9])) << 4 | (asciiToDec(bufferCorrected[10]));
     msg1.buf[0] = (asciiToDec(bufferCorrected[ 7])) << 4 | (asciiToDec(bufferCorrected[ 8]));
+
+    for (int i = msg1.len; i < 8; ++i) {
+        msg1.buf[i] = 0;  // had issues with getting wrong data where it shouldn't be any. this should fix it. 
+    }
 
     // // msg2
     // msg2.id = asciiToDec(bufferCorrected[26]) << 8 | asciiToDec(bufferCorrected[27]) << 4 | asciiToDec(bufferCorrected[28]) << 0;

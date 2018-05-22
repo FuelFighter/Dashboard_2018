@@ -21,7 +21,7 @@
 #define PIN_SWHEEL_LIGHT  17
 
 
-#define SPEED_SCALAR   10.0
+#define SPEED_SCALAR    5.0
 #define CURRENT_SCALAR 10.0
 #define VOLTAGE_SCALAR 10.0
 #define ENERGY_SCALAR  10.0
@@ -85,6 +85,8 @@ Adafruit_NeoPixel swheelLights(NUM_SWHEEL_LIGHTS, PIN_SWHEEL_LIGHT, NEO_GRBW + N
 // CANbus
 CAN_message_t txmsg, rxmsg1, rxmsg2;
 TimerOne t1;
+String inputString = "";
+bool   inputComplete = false;
 
 // TIMING
 unsigned long millisStart = millis();
@@ -214,6 +216,7 @@ void initLights() {
 void initCANbus() {
     // can't get CAN to work locally, had to opt for CANtoUART library
     Serial3.begin(SERIAL_BAUDRATE);
+    inputString.reserve(CAN_LEN * 4);  // to be sure to have enough
 }
 
 void initSerial() {
@@ -543,29 +546,159 @@ void displayLapTime(const volatile int& lapTimeMillis) {
 }
 
 void parseMotor1msg(const CAN_message_t& msg) {
+    // there are a lot of checks for how much something is changed in these functions.
+    // i'm certain there's a better way to do this, like for ex. a low pass filter or something.
+    // but this works and i'll leave it as is. i don't dare fixing something that works. 
     motor1state = msg.buf[0];
-    motor1speed = msg.buf[6] / SPEED_SCALAR;
-    motor1current = msg.buf[1] / CURRENT_SCALAR;
-    motor1temp = msg.buf[7];
+    static const int NO_MESSAGE_COUNT_MAX = 3;
+    
+    float speed = msg.buf[6] / SPEED_SCALAR;
+    static const int SPEED_MAX_CHANGE = 4;
+    static int countSinceLastChange_speed = 0;
+    if (abs(motor1speed - speed) <= SPEED_MAX_CHANGE) {
+        // had flickering issues where it would jump down to 0 sometimes, this is to make sure it only updates if the change is small enough
+        motor1speed = speed;
+        countSinceLastChange_speed = 0;
+    }
+    else {
+        ++countSinceLastChange_speed;
 
-    motor1totalEnergy = (msg.buf[5] << 8 | msg.buf[4]) / ENERGY_SCALAR;
+        // static const int NO_MESSAGE_COUNT_MAX = 4;
+        if (countSinceLastChange_speed >= NO_MESSAGE_COUNT_MAX) {
+            // if no message has been accepted for x messages, update anyways
+            motor1speed = speed;
+            countSinceLastChange_speed = 0;
+        }
+    }
+
+    int current_temp = msg.buf[1];
+    if (current_temp > 128) {
+        // this makes sure we can get negative current
+        current_temp -= 255;
+    }    
+    motor1current = current_temp / CURRENT_SCALAR;
+    
+    float temperature = msg.buf[7];
+    static const int TEMP_MAX_CHANGE = 4;
+    static int countSinceLastChange_temperature = 0;
+    if (abs(motor1temp - temperature) <= TEMP_MAX_CHANGE) {
+        // had flickering issues where it would jump down to 0 sometimes, this is to make sure it only updates if the change is small enough
+        motor1temp = temperature;
+        countSinceLastChange_temperature = 0;
+    }
+    else {
+        ++countSinceLastChange_temperature;
+
+        // static const int NO_MESSAGE_COUNT_MAX = 3;  // this is so low since this functions isn't called on every received message
+        if (countSinceLastChange_temperature >= NO_MESSAGE_COUNT_MAX) {
+            // if no message has been accepted for x messages, update anyways
+            motor1temp = temperature;
+            countSinceLastChange_temperature = 0;
+        }
+    }
+
+    int energy_temp = (msg.buf[5] << 8 | msg.buf[4]) / ENERGY_SCALAR;
+    static const int ENERGY_CHANGE_MAX = 4;
+    static int countSinceLastChange_energy = 0;
+    if (abs(motor1totalEnergy - energy_temp) <= ENERGY_CHANGE_MAX) {
+        motor1totalEnergy = energy_temp;
+        countSinceLastChange_energy = 0;
+    }
+    else {
+        ++countSinceLastChange_energy;
+
+        // static const int NO_MESSAGE_COUNT_MAX = 3;
+        if(countSinceLastChange_energy >= NO_MESSAGE_COUNT_MAX) {
+            motor1totalEnergy = energy_temp;
+            countSinceLastChange_energy = 0;
+        }
+    }
 }
 
 void parseMotor2msg(const CAN_message_t& msg) {
+    // there are a lot of checks for how much something is changed in these functions.
+    // i'm certain there's a better way to do this, like for ex. a low pass filter or something.
+    // but this works and i'll leave it as is. i don't dare fixing something that works. 
     motor2state = msg.buf[0];
-    motor2speed = msg.buf[6] / SPEED_SCALAR;
-    motor2current = msg.buf[1] / CURRENT_SCALAR;
-    motor2temp = msg.buf[7];
+    static const int NO_MESSAGE_COUNT_MAX = 3;
+    
+    float speed = msg.buf[6] / SPEED_SCALAR;
+    static const int SPEED_MAX_CHANGE = 4;
+    static int countSinceLastChange_speed = 0;
+    if (abs(motor2speed - speed) <= SPEED_MAX_CHANGE) {
+        // had flickering issues where it would jump down to 0 sometimes, this is to make sure it only updates if the change is small enough
+        motor2speed = speed;
+        countSinceLastChange_speed = 0;
+    }
+    else {
+        ++countSinceLastChange_speed;
 
-    motor2totalEnergy = (msg.buf[5] << 8 | msg.buf[4]) / ENERGY_SCALAR;
+        // static const int NO_MESSAGE_COUNT_MAX = 4;
+        if (countSinceLastChange_speed >= NO_MESSAGE_COUNT_MAX) {
+            // if no message has been accepted for x messages, update anyways
+            motor2speed = speed;
+            countSinceLastChange_speed = 0;
+        }
+    }
+    
+    int current_temp = msg.buf[1];
+    if (current_temp > 128) {
+        // this makes sure we can get negative current
+        current_temp -= 255;
+    }    
+    motor2current = current_temp / CURRENT_SCALAR;
+
+    float temperature = msg.buf[7];
+    static const int TEMP_MAX_CHANGE = 4;
+    static int countSinceLastChange_temperature = 0;
+    if (abs(motor2temp - temperature) <= TEMP_MAX_CHANGE) {
+        // had flickering issues where it would jump down to 0 sometimes, this is to make sure it only updates if the change is small enough
+        motor2temp = temperature;
+        countSinceLastChange_temperature = 0;
+    }
+    else {
+        ++countSinceLastChange_temperature;
+
+        // static const int NO_MESSAGE_COUNT_MAX = 3;
+        if (countSinceLastChange_temperature >= NO_MESSAGE_COUNT_MAX) {
+            // if no message has been accepted for x messages, update anyways
+            motor2temp = temperature;
+            countSinceLastChange_temperature = 0;
+        }
+    }
+
+    int energy_temp = (msg.buf[5] << 8 | msg.buf[4]) / ENERGY_SCALAR;
+    static const int ENERGY_CHANGE_MAX = 4;
+    static int countSinceLastChange_energy = 0;
+    if (abs(motor2totalEnergy - energy_temp) <= ENERGY_CHANGE_MAX) {
+        motor2totalEnergy = energy_temp;
+        countSinceLastChange_energy = 0;
+    }
+    else {
+        ++countSinceLastChange_energy;
+
+        // static const int NO_MESSAGE_COUNT_MAX = 3;
+        if(countSinceLastChange_energy >= NO_MESSAGE_COUNT_MAX) {
+            motor2totalEnergy = energy_temp;
+            countSinceLastChange_energy = 0;
+        }
+    }
 }
 
 void parseClutch1msg(const CAN_message_t& msg) {
     motor1clutch = msg.buf[2];
+
+    // if (motor1clutch != 0 || motor1clutch != 1 || motor1clutch != 2) {
+    //     motor1clutch = -1;  // TODO: change later. this is a bad quick fix
+    // }
 }
 
 void parseClutch2msg(const CAN_message_t& msg) {
     motor2clutch = msg.buf[2];
+
+    // if (motor2clutch != 0 || motor2clutch != 1 || motor2clutch != 2) {
+    //     motor2clutch = -1;  // TODO: change later. this is a bad quick fix
+    // }
 }
 
 /* MAIN PROGRAM */
@@ -651,7 +784,7 @@ void loop() {
     const int CAN_LEN = 25;
     char canBuffer[CAN_LEN * 2] = {0};
     readCANfromUARTtoBuffer(canBuffer);
-    // Serial.print(canBuffer);
+    Serial.print(canBuffer);
     parseUARTbufferToCANmessage(canBuffer, rxmsg1, rxmsg2);
     // Serial.print(canBuffer);
     // Serial.print(" ID1: ");  Serial.print(rxmsg1.id);
@@ -705,7 +838,23 @@ void loop() {
     if (motorCANreceived) {
         drawSpeed(screen1, motor1speed, motor2speed);
 
-        voltage = (motorMsg.buf[3] << 8 | motorMsg.buf[2]) / VOLTAGE_SCALAR;
+
+        int voltage_temp = (motorMsg.buf[3] << 8 | motorMsg.buf[2]) / VOLTAGE_SCALAR;
+        static const int VOLTAGE_MAX_CHANGE = 8;
+        static int countSinceLastChange_voltage = 0;
+        if (abs(voltage - voltage_temp) <= VOLTAGE_MAX_CHANGE) {
+            voltage = voltage_temp;
+            countSinceLastChange_voltage = 0;
+        }
+        else {
+            ++countSinceLastChange_voltage;
+
+            static const int NO_MESSAGE_COUNT_MAX = 5;
+            if(countSinceLastChange_voltage >= NO_MESSAGE_COUNT_MAX) {
+                voltage = voltage_temp;
+                countSinceLastChange_voltage = 0;
+            }
+        }
 
         drawCurrentValue(screen1, motor1current, motor2current);
         drawVoltageValue(screen2, voltage);
@@ -715,9 +864,9 @@ void loop() {
 
         drawTemperature(screen2, motor1temp, motor2temp);
 
-        static const int ENERGY_CHANGE_THRESHOLD = 2;  // kJ
-        if (abs(motor1totalEnergy - motor1totalEnergy_prev) >= ENERGY_CHANGE_THRESHOLD ||
-            abs(motor2totalEnergy - motor2totalEnergy_prev) >= ENERGY_CHANGE_THRESHOLD) {
+        static const double ENERGY_CHANGE_MIN = 1.2;  // kJ
+        if (abs(motor1totalEnergy - motor1totalEnergy_prev) >= ENERGY_CHANGE_MIN ||
+            abs(motor2totalEnergy - motor2totalEnergy_prev) >= ENERGY_CHANGE_MIN) {
             motor1totalEnergy_prev = motor1totalEnergy;
             motor2totalEnergy_prev = motor2totalEnergy;
 
@@ -1000,5 +1149,5 @@ void gearAutoManual_ISR() {
 void t1_OVF_ISR() {
     // if (deadmanSwitchIsPressed) {
     sendCANoverUART(txmsg);
-    Serial.print("  SENT CAN  ");
+    // Serial.print("  SENT CAN  ");
 }
