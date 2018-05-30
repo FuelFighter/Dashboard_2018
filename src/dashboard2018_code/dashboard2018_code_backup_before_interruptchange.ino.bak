@@ -260,7 +260,7 @@ void initPins() {
     attachInterrupt(digitalPinToInterrupt(PIN_OPTIMAL_BRAKE), optimalBrakeButtonChanged_ISR, CHANGE);
 
     pinMode(PIN_BLANK, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(PIN_BLANK), blankButtonChanged_ISR, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIN_BLANK), blankButtonChanged_ISR, FALLING);
 
 
     // Dashboard buttons
@@ -268,7 +268,7 @@ void initPins() {
     attachInterrupt(digitalPinToInterrupt(PIN_LIGHT_ENABLE), lightsEnable_ISR, CHANGE);
 
     pinMode(PIN_BRAKE_ENABLED, INPUT_PULLUP);  // push button (at pedal)
-    //attachInterrupt(digitalPinToInterrupt(PIN_BRAKE_ENABLED), brakeButtonChanged_ISR, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIN_BRAKE_ENABLED), brakeButtonChanged_ISR, CHANGE);
 
     pinMode(PIN_HAZARD_LIGHT, INPUT_PULLUP);  // flip switch
     attachInterrupt(digitalPinToInterrupt(PIN_HAZARD_LIGHT), hazardLightButtonChanged_ISR, CHANGE);
@@ -373,7 +373,7 @@ void initSteeringWheelLightShow() {
 
 /* FUNCTIONS */
 void readThrottle() {
-    static const int THROTTLE_RAW_LOW  = 408;
+    static const int THROTTLE_RAW_LOW  = 404;
     static const int THROTTLE_RAW_HIGH = 530;
     static const int THROTTLE_LOW  = 0;
 
@@ -408,7 +408,7 @@ void readThrottle() {
 }
 
 void readRegen() {
-    static const int REGEN_RAW_LOW  = 444;
+    static const int REGEN_RAW_LOW  = 436;
     static const int REGEN_RAW_HIGH = 542;
     static const int REGEN_LOW  = 0;
 
@@ -432,16 +432,17 @@ void readRegen() {
         ccActive = false;
     }
 
-    if (regen > 0 && deadmanSwitchIsPressed) {
+    if (regen > 0) {
         brakeEnabled = true;
-        // drivingLightsBack(backLights);
+        drivingLightsBack(backLights);
     }
     else {
         brakeEnabled = false;
 
-        // if (!drivingLightsEnabled || !rightBlinkerPressed || !leftBlinkerPressed || !hazardLightActive) {
-        //     turnOffStrip(backLights);
-        // }
+        if (!drivingLightsEnabled) {
+            turnOffStrip(backLights);
+        }
+
     }
 
     Serial.print(" R: "); Serial.print(regenRaw); Serial.print("-"); Serial.print(regen); Serial.print(" ");    
@@ -520,35 +521,8 @@ void doLightStuffLikeBlinkLightsAndDrivingLightsOnOrOff() {
         }
     }
 
-    int state = digitalRead(PIN_BRAKE_ENABLED);
-    if (state == HIGH  || brakeEnabled) {  // is unpressed in this case (button connected in reverse)
-        // brake lights on
-        backLights.setBrightness(BRIGHTNESS_BACK_BRAKE);
-        brakeEnabled = true;
-        // drivingLightsBack(backLights);
-        Serial.print("  BRAKES ON FUNC  ");
-    }
-    else {  // is pressed
-        // brake lights off
-        backLights.setBrightness(BRIGHTNESS_BACK);
-        brakeEnabled = false;
-        // if (!drivingLightsEnabled || !rightBlinkerPressed || !leftBlinkerPressed || !hazardLightActive) {
-        //     turnOffStrip(backLights);
-        // }
-        // Serial.print("  BRAKES OFF FUNC  ");
-
-        ccActive = false;
-    }
-
-    Serial.print(" ");
-    Serial.print(brakeEnabled);
-    Serial.print(" ");
-
-    if (brakeEnabled) {
-        drivingLightsBack(backLights);
-    }
-
     if (drivingLightsEnabled && !(rightBlinkerPressed || leftBlinkerPressed || hazardLightActive)) {
+        // this can be optimized by only updating IF the blinkers have been unpressed
         drivingLightsFront(frontLights);
         drivingLightsBack(backLights);
     }
@@ -559,8 +533,6 @@ void doLightStuffLikeBlinkLightsAndDrivingLightsOnOrOff() {
             turnOffStrip(backLights);
         }
     }
-
-    
 }
 
 void displayLapTime(const volatile int& lapTimeMillis) {
@@ -810,7 +782,6 @@ void loop() {
     //while (!inputComplete) { Serial.print("\r\r\r\r"); };  // wait for input to complete. need something in loop for it to not crash??? why? 
     if (inputComplete) {
         const char * canBuffer = inputString.c_str();
-        Serial.print(canBuffer);
         inputString = "";
         inputComplete = false;
         parseUARTbufferToCANmessage(canBuffer, rxmsg1, rxmsg2);
@@ -941,7 +912,7 @@ void loop() {
         screen2.refresh();
     }
 
-    if (secondCounter == 30) {
+    if (secondCounter >= 30) {
         // this is just to update the screen every half a minute 
         screen2.refresh(); 
     }
@@ -968,30 +939,23 @@ void loop() {
 
 /* ISRs */
 void resetLapTimeAndIncrementLapCount_ISR() {
-    static unsigned long last_interrupt_time = 0;
-    unsigned long interrupt_time = millis();
-    // If interrupts come faster than 200ms, assume it's a bounce and ignore
-    if (interrupt_time - last_interrupt_time > 200)
-    {
-        // if statement to make sure button in not accedently pressed multiple times in a row
-        if (!lapButtonPressedRecently) {
-            lapButtonPressedRecently = true;
-            lapButtonCooldown = LAP_BUTTON_COOLDOWN_SECS;
-            lapTimes[lapCount-1] = lapTimeMillis;
-            //lapCount = (lapCount + TOTAL_LAPS) % TOTAL_LAPS + 1;  // to not crash after 10 laps
-            ++lapCount;
-            if (lapCount > TOTAL_LAPS) {
-                reset();
-            }
-            lapTimeMillis = 0;
-            newLap = true;
-            Serial.print("  NEW LAP!  ");
+    // if statement to make sure button in not accedently pressed multiple times in a row
+    if (!lapButtonPressedRecently) {
+        lapButtonPressedRecently = true;
+        lapButtonCooldown = LAP_BUTTON_COOLDOWN_SECS;
+        lapTimes[lapCount-1] = lapTimeMillis;
+        //lapCount = (lapCount + TOTAL_LAPS) % TOTAL_LAPS + 1;  // to not crash after 10 laps
+        ++lapCount;
+        if (lapCount > TOTAL_LAPS) {
+            reset();
         }
-        else {
-            Serial.print("  TOO SOON  ");
-        }
+        lapTimeMillis = 0;
+        newLap = true;
+        Serial.print("  NEW LAP!  ");
     }
-    last_interrupt_time = interrupt_time;
+    else {
+        Serial.print("  TOO SOON  ");
+    }
 }
 
 void deadmanSwtichChanged_ISR() {
@@ -1106,65 +1070,33 @@ void ccButtonPressed_ISR() {
 }
 
 void optimalCurrentButtonChanged_ISR() {
-    // static unsigned long last_interrupt_time = 0;
-    // unsigned long interrupt_time = millis();
-    // // If interrupts come faster than 200ms, assume it's a bounce and ignore
-    // if (interrupt_time - last_interrupt_time > 200)
-    // {
-        int state = digitalRead(PIN_OPTIMAL_CURRENT);
+    int state = digitalRead(PIN_OPTIMAL_CURRENT);
 
-        if (state == HIGH) {  // RISING -- is unpressed
-            optimalCurrent = false;
-            Serial.print("  OPT-CURR OFF  ");
-        }
-        else {
-            optimalCurrent = true;
-            Serial.print("  OPT-CURR ON  ");
-        }
-    // }
-    // last_interrupt_time = interrupt_time;
+    if (state == HIGH) {  // RISING -- is unpressed
+        optimalCurrent = false;
+        Serial.print("  OPT-CURR OFF  ");
+    }
+    else {
+        optimalCurrent = true;
+        Serial.print("  OPT-CURR ON  ");
+    }
 }
 
 void optimalBrakeButtonChanged_ISR() {
-    // static unsigned long last_interrupt_time = 0;
-    // unsigned long interrupt_time = millis();
-    // // If interrupts come faster than 200ms, assume it's a bounce and ignore
-    // if (interrupt_time - last_interrupt_time > 200)
-    // {
-        int state = digitalRead(PIN_OPTIMAL_BRAKE);
+    int state = digitalRead(PIN_OPTIMAL_BRAKE);
 
-        if (state == HIGH) {  // RISING -- is unpressed
-            optimalBrake = false;
-            Serial.print("  OPT-BRAKE OFF  ");
-        }
-        else {
-            optimalBrake = true;
-            Serial.print("  OPT-BRAKE ON  ");
-        }
-    // }
-    // last_interrupt_time = interrupt_time;
+    if (state == HIGH) {  // RISING -- is unpressed
+        optimalBrake = false;
+        Serial.print("  OPT-BRAKE OFF  ");
+    }
+    else {
+        optimalBrake = true;
+        Serial.print("  OPT-BRAKE ON  ");
+    }
 }
 
 void blankButtonChanged_ISR() {
-    static unsigned long last_interrupt_time = 0;
-    unsigned long interrupt_time = millis();
-    // If interrupts come faster than x ms, assume it's a bounce and ignore
-    if (interrupt_time - last_interrupt_time > 1000)
-    {
-        int state = digitalRead(PIN_BLANK);
-
-        if (state == HIGH) {  // RISING -- is unpressed
-            // Only want to reset on de-press. The surrounding code is for making sure the de-press isn't registrered if it happenes
-            // within x ms of the press. 
-            reset();
-            Serial.println(" BLANK UNPRESSED! ");
-        }
-        else {
-            Serial.print(" BLANK OTHER ");
-        }
-    }
-    last_interrupt_time = interrupt_time;
-
+    reset();
     Serial.print("  BLANK  ");
 }
 

@@ -111,39 +111,6 @@ void parseUARTbufferToCANmessage(const char bufferCorrected[], CAN_message_t& ms
     msg1.id = asciiToDec(bufferCorrected[1]) << 8 | asciiToDec(bufferCorrected[2]) << 4 | asciiToDec(bufferCorrected[3]) << 0;
     msg1.len = asciiToDec(bufferCorrected[5]);
 
-    // for (int i = 0; i < msg1.len; ++i) {
-    //     switch (i) {
-    //         case 0:
-    //             msg1.buf[0] = (asciiToDec(bufferCorrected[ 7])) << 4 | (asciiToDec(bufferCorrected[ 8]));
-    //             break;
-    //         case 1:        
-    //             msg1.buf[1] = (asciiToDec(bufferCorrected[ 9])) << 4 | (asciiToDec(bufferCorrected[10]));
-    //             break;
-    //         case 2:
-    //             msg1.buf[2] = (asciiToDec(bufferCorrected[11])) << 4 | (asciiToDec(bufferCorrected[12]));
-    //             break;
-    //         case 3:
-    //             msg1.buf[3] = (asciiToDec(bufferCorrected[13])) << 4 | (asciiToDec(bufferCorrected[14]));
-    //             break;
-    //         case 4:
-    //             msg1.buf[4] = (asciiToDec(bufferCorrected[15])) << 4 | (asciiToDec(bufferCorrected[16]));
-    //             break;
-    //         case 5:
-    //             msg1.buf[5] = (asciiToDec(bufferCorrected[17])) << 4 | (asciiToDec(bufferCorrected[18]));
-    //             break;
-    //         case 6:
-    //             msg1.buf[6] = (asciiToDec(bufferCorrected[19])) << 4 | (asciiToDec(bufferCorrected[20]));
-    //             break;
-    //         case 7:
-    //             msg1.buf[7] = (asciiToDec(bufferCorrected[21])) << 4 | (asciiToDec(bufferCorrected[22]));
-    //         default:
-    //             msg1.buf[i] = 0;
-    //     }
-
-    //     // I know this is terribly stupid and ugly code. 
-    //     // Not going to figure out a smarter way, though. So deal with it.
-    // }
-
     msg1.buf[7] = (asciiToDec(bufferCorrected[21])) << 4 | (asciiToDec(bufferCorrected[22]));
     msg1.buf[6] = (asciiToDec(bufferCorrected[19])) << 4 | (asciiToDec(bufferCorrected[20]));
     msg1.buf[5] = (asciiToDec(bufferCorrected[17])) << 4 | (asciiToDec(bufferCorrected[18]));
